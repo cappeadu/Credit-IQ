@@ -117,18 +117,31 @@ def validate_numeric_values(
 
 
 # load dataset
-def load_dataset(data_path, frac=None, read_excel=None, read_csv=None):
+def load_dataset(data_path, frac=None, read_excel=False, read_csv=False):
+    """Load exactly one supported dataset format.
+
+    The previous implementation silently allowed both format flags to be
+    false, which left ``df`` undefined.  It also sampled without a fixed seed,
+    making a sampled dataset difficult to reproduce.
+    """
+    if read_excel == read_csv:
+        raise ValueError("Set exactly one of read_excel or read_csv to True.")
+
     if read_excel:
         df = pd.read_excel(data_path)
-    if read_csv:
+    else:
         df = pd.read_csv(data_path)
 
-    df = df.sample(frac=frac) if frac else df
+    if frac is not None:
+        if not 0 < frac <= 1:
+            raise ValueError("frac must be greater than 0 and no greater than 1.")
+        df = df.sample(frac=frac, random_state=42).reset_index(drop=True)
+
     return df
 
 
 def categorize_features(df):
-    df = df.astype("int")  # change to integers
+    df = df.copy().astype("int")  # change to integers
 
     # education
     # 1: Graduate School
@@ -153,6 +166,20 @@ def categorize_features(df):
 
 # clean columns function
 def clean_cols(df):
+    """Convert the source dataset into the canonical cleaned schema.
+
+    The source workbook currently contains a header row that is promoted from
+    the first data row by the original project workflow.  That behaviour is
+    retained for compatibility, but the resulting frame is now validated
+    before it is returned to the training pipeline.
+    """
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("Expected a pandas DataFrame.")
+    if df.empty:
+        raise ValueError("The input dataset is empty.")
+
+    df = df.copy()
+
     # create dataset with readable column names
     custom_col_names = [
         "limit",
@@ -181,12 +208,33 @@ def clean_cols(df):
         "target",
     ]
 
-    # change column names to names on first row
-    df.columns = df.iloc[0].values  # first row becomes the columns
-    df = (
-        df.iloc[1:].reset_index(drop=True).drop("ID", axis=1)
-    )  # drop ID column. not useful
+    # Cleaned CSV splits already use the canonical schema.  Make cleaning
+    # idempotent so those files can safely pass through the same boundary.
+    if set(df.columns) == set(custom_col_names):
+        df = df[custom_col_names]
+        df = categorize_features(df)
+        validate_schema(df, require_target=True)
+        validate_numeric_values(df, include_target=True)
+        return df
+
+    # Change column names to names on the first row.  This is the format used
+    # by the current source workbook and is kept until the source-data format
+    # is standardised in a later stage.
+    first_row_columns = df.iloc[0].tolist()
+    if len(first_row_columns) != len(custom_col_names) + 1:
+        raise ValueError(
+            "Unexpected source schema: expected an ID column plus "
+            f"{len(custom_col_names)} data columns, got {len(first_row_columns)}."
+        )
+
+    df.columns = first_row_columns  # first row becomes the columns
+    if "ID" not in df.columns:
+        raise ValueError("Unexpected source schema: missing ID column.")
+
+    df = df.iloc[1:].reset_index(drop=True).drop("ID", axis=1)
     df.columns = custom_col_names  # replace columns with custom names
 
     df = categorize_features(df)
+    validate_schema(df, require_target=True)
+    validate_numeric_values(df, include_target=True)
     return df
