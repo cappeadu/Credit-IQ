@@ -1,12 +1,18 @@
 import json
 
 import joblib
+import numpy as np
 import pandas as pd
 import typer
 from sklearn.metrics import f1_score, precision_score, recall_score, roc_auc_score
 from typing_extensions import Annotated
 
 from src.config import ROOT
+from src.data import (
+    MODEL_FEATURE_COLUMNS,
+    TARGET_COLUMN,
+    validate_feature_engineered_schema,
+)
 from src.utils import loan_decision
 
 app = typer.Typer()
@@ -18,7 +24,11 @@ def test_predictions(
     model_path: Annotated[str, typer.Option(help="dataset path or link")] = None,
 ):
     df = pd.read_csv(f"{test_set_path}/test_only.csv")
-    X_test_fe, y_test_fe = df.drop("target", axis=1), df["target"]
+    validate_feature_engineered_schema(df, require_target=True)
+    if not np.isfinite(df[MODEL_FEATURE_COLUMNS].to_numpy(dtype=float)).all():
+        raise ValueError("Test data contains non-finite model features.")
+
+    X_test_fe, y_test_fe = df.drop(TARGET_COLUMN, axis=1), df[TARGET_COLUMN]
 
     calibrated_model = joblib.load(f"{model_path}/calibrated_model.joblib")
 

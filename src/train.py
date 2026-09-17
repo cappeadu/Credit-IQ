@@ -15,7 +15,13 @@ from typing_extensions import Annotated
 from xgboost import XGBClassifier
 
 from src.config import ROOT, THRESHOLDS, cat_cols
-from src.data import clean_cols, load_dataset
+from src.data import (
+    clean_cols,
+    load_dataset,
+    validate_feature_engineered_schema,
+    validate_numeric_values,
+    validate_schema,
+)
 from src.utils import FeatureEngineering, split_dataset
 
 app = typer.Typer()
@@ -36,6 +42,8 @@ def train(
 
     # 2. # clean columns and properly categorize columns
     df = clean_cols(df)
+    validate_schema(df, require_target=True)
+    validate_numeric_values(df, include_target=True)
 
     # 3. split and save dataset
     train_df, test_df = split_dataset(
@@ -48,6 +56,17 @@ def train(
     train_df_fe = feature_engineering.fit_transform(train_df)
     val_df_fe = feature_engineering.transform(val_df)
     test_df_fe = feature_engineering.transform(test_df)
+    for split_name, split_df in {
+        "train": train_df_fe,
+        "validation": val_df_fe,
+        "test": test_df_fe,
+    }.items():
+        try:
+            validate_feature_engineered_schema(split_df, require_target=True)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"Invalid feature-engineered {split_name} split: {exc}"
+            ) from exc
     test_df_fe.to_csv(f"{path_to_save_test_only}/test_only.csv", index=False)
 
     X_train_fe, y_train_fe = train_df_fe.drop("target", axis=1), train_df_fe["target"]

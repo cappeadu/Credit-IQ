@@ -2,7 +2,14 @@ import unittest
 
 import pandas as pd
 
-from src.data import RAW_FEATURE_COLUMNS, TARGET_COLUMN, validate_schema
+from src.data import (
+    DERIVED_FEATURE_COLUMNS,
+    MODEL_FEATURE_COLUMNS,
+    RAW_FEATURE_COLUMNS,
+    TARGET_COLUMN,
+    validate_feature_engineered_schema,
+    validate_schema,
+)
 
 
 def make_customer_frame(include_target=True):
@@ -31,6 +38,22 @@ class SchemaValidationTests(unittest.TestCase):
         frame["unexpected"] = 1
         with self.assertRaisesRegex(ValueError, "Unexpected columns"):
             validate_schema(frame, require_target=True)
+
+    def test_feature_engineered_schema_requires_derived_features(self):
+        frame = make_customer_frame()
+        for column in DERIVED_FEATURE_COLUMNS:
+            frame[column] = 0
+
+        validate_feature_engineered_schema(frame, require_target=True)
+        self.assertEqual(len(MODEL_FEATURE_COLUMNS), len(RAW_FEATURE_COLUMNS) + 7)
+
+    def test_feature_engineered_schema_rejects_missing_derived_feature(self):
+        frame = make_customer_frame()
+        for column in DERIVED_FEATURE_COLUMNS[:-1]:
+            frame[column] = 0
+
+        with self.assertRaisesRegex(ValueError, "Missing feature-engineered columns"):
+            validate_feature_engineered_schema(frame, require_target=True)
 
 
 if __name__ == "__main__":

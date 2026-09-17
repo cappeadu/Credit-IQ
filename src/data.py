@@ -32,6 +32,18 @@ RAW_FEATURE_COLUMNS = [
 
 TARGET_COLUMN = "target"
 
+DERIVED_FEATURE_COLUMNS = [
+    "pay_streak",
+    "avg_payment_delay",
+    "utilization_rate",
+    "pmt_ratio",
+    "bill_trend",
+    "avg_utilization",
+    "worst_pmt_delay",
+]
+
+MODEL_FEATURE_COLUMNS = RAW_FEATURE_COLUMNS + DERIVED_FEATURE_COLUMNS
+
 
 def validate_schema(
     df: pd.DataFrame,
@@ -114,6 +126,38 @@ def validate_numeric_values(
             "Columns contain missing or non-finite values: "
             + ", ".join(non_finite_columns)
         )
+
+
+def validate_feature_engineered_schema(
+    df: pd.DataFrame,
+    *,
+    require_target: bool = False,
+) -> None:
+    """Validate the columns expected after feature engineering."""
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("Expected a pandas DataFrame.")
+
+    required_columns = MODEL_FEATURE_COLUMNS.copy()
+    if require_target:
+        required_columns.append(TARGET_COLUMN)
+
+    missing_columns = [column for column in required_columns if column not in df]
+    if missing_columns:
+        raise ValueError(
+            "Missing feature-engineered columns: "
+            + ", ".join(missing_columns)
+        )
+
+    allowed_columns = set(required_columns)
+    extra_columns = [column for column in df.columns if column not in allowed_columns]
+    if extra_columns:
+        raise ValueError(
+            "Unexpected feature-engineered columns: "
+            + ", ".join(map(str, extra_columns))
+        )
+
+    if not np.isfinite(df[MODEL_FEATURE_COLUMNS].to_numpy(dtype=float)).all():
+        raise ValueError("Feature-engineered data contains non-finite values.")
 
 
 # load dataset

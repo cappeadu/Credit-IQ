@@ -3,7 +3,11 @@ import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.model_selection import train_test_split
 
-from src.data import validate_numeric_values, validate_schema
+from src.data import (
+    DERIVED_FEATURE_COLUMNS,
+    validate_numeric_values,
+    validate_schema,
+)
 
 
 # split dataset function
@@ -117,16 +121,7 @@ class FeatureEngineering(TransformerMixin, BaseEstimator):
             axis=1,
         )
 
-        derived_columns = [
-            "pay_streak",
-            "avg_payment_delay",
-            "utilization_rate",
-            "pmt_ratio",
-            "bill_trend",
-            "avg_utilization",
-            "worst_pmt_delay",
-        ]
-        if not np.isfinite(df[derived_columns].to_numpy(dtype=float)).all():
+        if not np.isfinite(df[DERIVED_FEATURE_COLUMNS].to_numpy(dtype=float)).all():
             raise ValueError("Feature engineering produced non-finite values.")
 
         return df
