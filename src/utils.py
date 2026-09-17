@@ -1,6 +1,9 @@
 import numpy as np
+import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.model_selection import train_test_split
+
+from src.data import validate_numeric_values, validate_schema
 
 
 # split dataset function
@@ -18,17 +21,27 @@ def split_dataset(
 
 #### create features
 class FeatureEngineering(TransformerMixin, BaseEstimator):
-    def fit(self, X):
+    def fit(self, X, y=None):
         return self
 
-    def correcting_zero_div(self, row):
-        if row["bill_amt_mth_6"] == 0:
-            return row["pmt_amt_mth_6"] / (row["bill_amt_mth_6"] + 1)
-        else:
-            return row["pmt_amt_mth_6"] / row["bill_amt_mth_6"]
-
     def transform(self, X, y=None):
+        """Create deterministic risk features from a cleaned customer frame.
+
+        The transformer validates its input before doing arithmetic.  A zero
+        credit limit is rejected because utilization cannot be defined for
+        that record.  When the latest bill is zero, payment ratio is defined
+        as zero rather than dividing by an arbitrary fallback denominator.
+        """
+        if not isinstance(X, pd.DataFrame):
+            raise TypeError("Expected a pandas DataFrame.")
+
         df = X.copy()
+        has_target = "target" in df.columns
+        validate_schema(df, require_target=has_target)
+        validate_numeric_values(df, include_target=has_target)
+
+        if (df["limit"] <= 0).any():
+            raise ValueError("Credit limit must be greater than zero.")
 
         # pay streak
         df["pay_streak"] = (
@@ -59,11 +72,17 @@ class FeatureEngineering(TransformerMixin, BaseEstimator):
             ]
         ).mean(axis=1)
 
-        # utilization_rate. upper limit reduced to 1
+        # utilization_rate. Upper limit reduced to 1.
         df["utilization_rate"] = np.clip(df["bill_amt_mth_6"] / df["limit"], None, 1)
 
-        # payment ratio
-        pmt_ratio = df.apply(self.correcting_zero_div, axis=1)
+        # Payment ratio. A zero bill has no meaningful payment denominator, so
+        # a zero ratio is used for that case instead of adding an arbitrary 1.
+        pmt_ratio = np.divide(
+            df["pmt_amt_mth_6"],
+            df["bill_amt_mth_6"],
+            out=np.zeros(len(df), dtype=float),
+            where=df["bill_amt_mth_6"].to_numpy() != 0,
+        )
         df["pmt_ratio"] = np.clip(pmt_ratio, None, 1)
 
         # bill trend
@@ -97,6 +116,19 @@ class FeatureEngineering(TransformerMixin, BaseEstimator):
             ],
             axis=1,
         )
+
+        derived_columns = [
+            "pay_streak",
+            "avg_payment_delay",
+            "utilization_rate",
+            "pmt_ratio",
+            "bill_trend",
+            "avg_utilization",
+            "worst_pmt_delay",
+        ]
+        if not np.isfinite(df[derived_columns].to_numpy(dtype=float)).all():
+            raise ValueError("Feature engineering produced non-finite values.")
+
         return df
 
 
