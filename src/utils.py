@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
@@ -14,12 +16,24 @@ from src.data import (
 def split_dataset(
     df, test_size=0.2, random_state=42, save_dataset=None, path_to_save=None
 ):
+    """Create a reproducible stratified split from a labelled clean dataset."""
+    validate_schema(df, require_target=True)
+    validate_numeric_values(df, include_target=True)
+
+    if not 0 < test_size < 1:
+        raise ValueError("test_size must be greater than 0 and less than 1.")
+
+    if save_dataset and not path_to_save:
+        raise ValueError("path_to_save is required when save_dataset is True.")
+
     train_df, test_df = train_test_split(
         df, test_size=test_size, stratify=df["target"], random_state=random_state
     )
     if save_dataset:
-        train_df.to_csv(f"{path_to_save}/train_set.csv", index=False)
-        test_df.to_csv(f"{path_to_save}/val_test_set.csv", index=False)
+        output_dir = Path(path_to_save)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        train_df.to_csv(output_dir / "train_set.csv", index=False)
+        test_df.to_csv(output_dir / "val_test_set.csv", index=False)
     return train_df, test_df
 
 
