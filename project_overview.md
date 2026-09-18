@@ -95,6 +95,17 @@ After logging, training verifies that the parent run finished and that each
 candidate model has a nested child run. This makes missing or incomplete tracking
 fail clearly instead of silently producing an incomplete experiment record.
 
+After training, the run can be reviewed without retraining:
+
+```powershell
+python scripts/verify_mlflow_run.py <PARENT_RUN_ID>
+```
+
+The script prints the selected model, reproducibility metadata, parent artifacts,
+and each candidate run's metrics and artifacts. It exits with an error if the
+expected candidate runs are missing. If the candidate registry changes, provide
+the expected names explicitly with repeated `--candidate` options.
+
 ## Evaluation approach
 
 Use three data roles:

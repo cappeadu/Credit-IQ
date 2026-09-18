@@ -64,6 +64,8 @@ When implementing a phase:
   written successfully.
 - Use the MLflow server at http://127.0.0.1:5000 with SQLite metadata in mlflow.db and artifacts in mlruns/. These are generated outputs and must not be committed.
 - Include model version and MLflow run information in the final model package when model packaging is implemented.
+- Use `scripts/verify_mlflow_run.py` for the manual MLflow review after training;
+  it must not retrain models or modify generated artifacts.
 
 ## Evaluation expectations
 
