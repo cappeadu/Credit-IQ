@@ -5,7 +5,6 @@ import joblib
 import numpy as np
 import pandas as pd
 import typer
-from sklearn.metrics import f1_score, precision_score, recall_score, roc_auc_score
 from typing_extensions import Annotated
 
 from src.config import ROOT
@@ -14,6 +13,7 @@ from src.data import (
     TARGET_COLUMN,
     validate_feature_engineered_schema,
 )
+from src.evaluation import evaluate_binary_predictions
 from src.utils import loan_decision
 
 app = typer.Typer()
@@ -88,39 +88,11 @@ def evaluate_predictions(
     if prediction_column not in scored_data:
         raise ValueError(f"Prediction column was not found: {prediction_column}")
 
-    target_values = scored_data[TARGET_COLUMN]
-    predicted_probabilities = scored_data["probability"]
-    predicted_classes = scored_data[prediction_column]
-    return {
-        "roc_auc_score": round(
-            roc_auc_score(target_values, predicted_probabilities),
-            4,
-        ),
-        "recall": round(
-            recall_score(
-                target_values,
-                predicted_classes,
-                zero_division=0,
-            ),
-            4,
-        ),
-        "precision": round(
-            precision_score(
-                target_values,
-                predicted_classes,
-                zero_division=0,
-            ),
-            4,
-        ),
-        "f1_score": round(
-            f1_score(
-                target_values,
-                predicted_classes,
-                zero_division=0,
-            ),
-            4,
-        ),
-    }
+    return evaluate_binary_predictions(
+        scored_data[TARGET_COLUMN],
+        scored_data["probability"],
+        scored_data[prediction_column],
+    )
 
 
 @app.command()
