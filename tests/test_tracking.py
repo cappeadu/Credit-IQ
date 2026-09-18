@@ -1,6 +1,8 @@
 import unittest
 
-from src.tracking import flatten_comparison_metrics
+import pandas as pd
+
+from src.tracking import fingerprint_dataframe, flatten_comparison_metrics
 
 
 class TrackingTests(unittest.TestCase):
@@ -21,6 +23,23 @@ class TrackingTests(unittest.TestCase):
                 "random_forest.pr_auc_score": 0.42,
                 "random_forest.recall": 0.61,
             },
+        )
+
+    def test_dataset_fingerprint_is_stable_for_the_same_frame(self):
+        data_frame = pd.DataFrame({"age": [25, 40], "limit": [1000, 2000]})
+
+        self.assertEqual(
+            fingerprint_dataframe(data_frame),
+            fingerprint_dataframe(data_frame.copy()),
+        )
+
+    def test_dataset_fingerprint_changes_when_data_changes(self):
+        original_data = pd.DataFrame({"age": [25, 40]})
+        changed_data = pd.DataFrame({"age": [25, 41]})
+
+        self.assertNotEqual(
+            fingerprint_dataframe(original_data),
+            fingerprint_dataframe(changed_data),
         )
 
 

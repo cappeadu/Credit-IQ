@@ -58,6 +58,10 @@ When implementing a phase:
 - Select thresholds using validation data and evaluate the frozen policy on an untouched test set.
 - Do not assume Random Forest is the best model. Compare documented baseline models and optionally tune them with Optuna.
 - Track training configuration, parameters, metrics, data identity, and selected model information with MLflow.
+- Each training run must record a deterministic dataset fingerprint, feature version,
+  repository revision when available, row counts, and the feature schema. Training
+  must verify that the parent comparison run and every candidate child run were
+  written successfully.
 - Use the MLflow server at http://127.0.0.1:5000 with SQLite metadata in mlflow.db and artifacts in mlruns/. These are generated outputs and must not be committed.
 - Include model version and MLflow run information in the final model package when model packaging is implemented.
 

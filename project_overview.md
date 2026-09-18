@@ -89,6 +89,12 @@ mlflow server --backend-store-uri sqlite:///mlflow.db --default-artifact-root ./
 Training connects to http://127.0.0.1:5000 and should only be started after the
 server is running.
 
+Each comparison run records a SHA-256 dataset fingerprint, feature-engineering
+version, Git revision when available, split row counts, and a JSON feature schema.
+After logging, training verifies that the parent run finished and that each
+candidate model has a nested child run. This makes missing or incomplete tracking
+fail clearly instead of silently producing an incomplete experiment record.
+
 ## Evaluation approach
 
 Use three data roles:

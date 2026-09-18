@@ -5,8 +5,10 @@ import typer
 from sklearn.calibration import CalibratedClassifierCV
 from typing_extensions import Annotated
 
-from src.config import ROOT, THRESHOLDS
+from src.config import FEATURE_VERSION, ROOT, THRESHOLDS
 from src.data import (
+    MODEL_FEATURE_COLUMNS,
+    RAW_FEATURE_COLUMNS,
     clean_cols,
     load_dataset,
     validate_feature_engineered_schema,
@@ -22,6 +24,8 @@ from src.modeling import (
 )
 from src.tracking import (
     configure_mlflow,
+    fingerprint_dataframe,
+    get_repository_revision,
     log_baseline_comparison_run,
 )
 from src.utils import FeatureEngineering, split_dataset
@@ -48,6 +52,7 @@ def train(
     cleaned_dataset = clean_cols(raw_dataset)
     validate_schema(cleaned_dataset, require_target=True)
     validate_numeric_values(cleaned_dataset, include_target=True)
+    dataset_fingerprint = fingerprint_dataframe(cleaned_dataset)
 
     # 3. split and save dataset
     training_data, holdout_data = split_dataset(
@@ -154,6 +159,21 @@ def train(
             "test_split": 0.1,
             "calibration_method": "isotonic",
             "calibration_cv": 5,
+        },
+        reproducibility_metadata={
+            "dataset_fingerprint": dataset_fingerprint,
+            "feature_version": FEATURE_VERSION,
+            "repository_revision": get_repository_revision(ROOT),
+            "cleaned_row_count": len(cleaned_dataset),
+            "training_row_count": len(training_data),
+            "validation_row_count": len(validation_data),
+            "test_row_count": len(test_data),
+        },
+        feature_schema={
+            "feature_version": FEATURE_VERSION,
+            "raw_features": RAW_FEATURE_COLUMNS,
+            "model_features": MODEL_FEATURE_COLUMNS,
+            "target": "target",
         },
         artifact_paths={
             "metrics": metrics_path,
