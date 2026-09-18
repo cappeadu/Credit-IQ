@@ -81,6 +81,14 @@ MLflow will be used locally to track experiments and make model comparisons repr
 
 The selected model package should retain the MLflow run ID and enough metadata to identify how it was produced. A local MLflow store is sufficient for this project; cloud tracking and enterprise model registries are out of scope.
 
+MLflow uses SQLite metadata in mlflow.db and stores artifacts in mlruns/.
+Start the tracking server from the repository root with:
+
+mlflow server --backend-store-uri sqlite:///mlflow.db --default-artifact-root ./mlruns --host 127.0.0.1 --port 5000
+
+Training connects to http://127.0.0.1:5000 and should only be started after the
+server is running.
+
 ## Evaluation approach
 
 Use three data roles:

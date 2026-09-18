@@ -1,6 +1,8 @@
 from pathlib import Path
 
 categorical_columns = ["edu", "marital_status"]
-ROOT = Path(__name__).parent.parent
+ROOT = Path(__file__).resolve().parent.parent
+MLFLOW_TRACKING_URI = "http://127.0.0.1:5000"
+MLFLOW_EXPERIMENT_NAME = "credit-card-risk"
 
 THRESHOLDS = {"lower_threshold": 0.12, "upper_threshold": 0.3}

@@ -14,10 +14,15 @@ from src.data import (
     validate_schema,
 )
 from src.modeling import (
+    DEFAULT_SELECTION_METRICS,
     build_candidate_models,
     comparison_table,
     evaluate_candidate_models,
     select_best_model,
+)
+from src.tracking import (
+    configure_mlflow,
+    log_baseline_comparison_run,
 )
 from src.utils import FeatureEngineering, split_dataset
 
@@ -34,6 +39,8 @@ def train(
         str, typer.Option(help="path to save test set only")
     ] = None,
 ):
+    configure_mlflow()
+
     # 1. load dataset
     raw_dataset = load_dataset(data_path=data_path, read_excel=True)
 
@@ -134,6 +141,29 @@ def train(
     metrics_path = ROOT / "metrics/val_set.json"
     with metrics_path.open("w") as f:
         f.write(results_json)
+
+    mlflow_run_id = log_baseline_comparison_run(
+        fitted_candidate_models=fitted_candidate_models,
+        comparison_results=comparison_results,
+        selected_model_name=best_model_name,
+        selection_metrics=DEFAULT_SELECTION_METRICS,
+        training_parameters={
+            "data_path": data_path,
+            "random_state": 42,
+            "validation_split": 0.1,
+            "test_split": 0.1,
+            "calibration_method": "isotonic",
+            "calibration_cv": 5,
+        },
+        artifact_paths={
+            "metrics": metrics_path,
+            "model": calibrated_model_path,
+            "selected_estimator": selected_model_path,
+            "preprocessing": feature_engineering_path,
+            "configuration": thresholds_path,
+        },
+    )
+    print(f"MLflow run ID: {mlflow_run_id}")
 
     return results_json
 
