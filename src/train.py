@@ -1,26 +1,22 @@
 import json
 
 import joblib
-import numpy as np
-import pandas as pd
 import typer
 from sklearn.calibration import CalibratedClassifierCV
-from sklearn.compose import ColumnTransformer
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import f1_score, precision_score, recall_score, roc_auc_score
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from typing_extensions import Annotated
-from xgboost import XGBClassifier
 
-from src.config import ROOT, THRESHOLDS, cat_cols
+from src.config import ROOT, THRESHOLDS
 from src.data import (
     clean_cols,
     load_dataset,
     validate_feature_engineered_schema,
     validate_numeric_values,
     validate_schema,
+)
+from src.modeling import (
+    build_candidate_models,
+    evaluate_candidate_models,
+    select_best_model,
 )
 from src.utils import FeatureEngineering, split_dataset
 
@@ -73,69 +69,18 @@ def train(
     X_val_fe, y_val_fe = val_df_fe.drop("target", axis=1), val_df_fe["target"]
     # X_test_fe, y_test_fe = test_df_fe.drop("target", axis=1), test_df_fe["target"]
 
-    num_cols = X_train_fe.drop(cat_cols + ["gender"], axis=1).columns
-
-    # logistic regression preprocessor
-    preprocessor = ColumnTransformer(
-        [
-            ("num", StandardScaler(), num_cols),
-            ("cat", OneHotEncoder(drop="first", handle_unknown="error"), cat_cols),
-            (
-                "gen",
-                OneHotEncoder(drop="if_binary", handle_unknown="error"),
-                ["gender"],
-            ),
-        ]
+    models = build_candidate_models(X_train_fe, y_train_fe)
+    models_feature_eng, results = evaluate_candidate_models(
+        models,
+        X_train_fe,
+        y_train_fe,
+        X_val_fe,
+        y_val_fe,
     )
 
-    cnt_def = np.sum(y_train_fe == 1)
-    cnt_non_def = np.sum(y_train_fe == 0)
-    scale_pos_weight = cnt_non_def / cnt_def
-
-    models = {
-        "Logistic Regression": LogisticRegression(
-            random_state=42, class_weight="balanced", max_iter=1000
-        ),
-        "Random Forest": RandomForestClassifier(
-            n_estimators=50, max_depth=6, random_state=42, class_weight="balanced"
-        ),
-        "XGBoost": XGBClassifier(
-            random_state=42,
-            n_estimators=100,
-            learning_rate=0.05,
-            max_depth=6,
-            scale_pos_weight=scale_pos_weight,
-        ),
-    }
-
-    results = {}
-    models_feature_eng = {}
-    for name, ml_model in models.items():
-        if name == "Logistic Regression":
-            log_model = Pipeline([("preprocessor", preprocessor), ("model", ml_model)])
-            log_model.fit(X_train_fe, y_train_fe)
-            preds = log_model.predict(X_val_fe)
-            probs = log_model.predict_proba(X_val_fe)[:, 1]
-            models_feature_eng[name] = log_model
-
-        else:
-            ml_model.fit(X_train_fe, y_train_fe)
-            preds = ml_model.predict(X_val_fe)
-            probs = ml_model.predict_proba(X_val_fe)[:, 1]
-            models_feature_eng[name] = ml_model
-
-        results[name] = {
-            "roc_auc_score": round(roc_auc_score(y_val_fe, probs), 4),
-            "recall": round(recall_score(y_val_fe, preds), 4),
-            "precision": round(precision_score(y_val_fe, preds), 4),
-            "f1_score": round(f1_score(y_val_fe, preds), 4),
-            "model_name": name,
-        }
-
-    # best model using recall
-    results_df_fe = pd.DataFrame(results)
-    results_df_fe_t = results_df_fe.T.reset_index(names=["model"])
-    best_model_name = results_df_fe_t.iloc[results_df_fe_t["recall"].idxmax()]["model"]
+    # Keep the current selection policy explicit; later evaluation stages can
+    # replace this with a documented multi-metric policy.
+    best_model_name = select_best_model(results, metric="recall")
     print(f"Best model: {best_model_name}")
     best_model = models_feature_eng[best_model_name]
 
