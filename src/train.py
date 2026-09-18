@@ -101,7 +101,7 @@ def train(
 
     # Keep the current selection policy explicit; later evaluation stages can
     # replace this with a documented multi-metric policy.
-    best_model_name = select_best_model(comparison_results, metric="recall")
+    best_model_name = select_best_model(comparison_results)
     print(f"Best model: {best_model_name}")
     selected_model = fitted_candidate_models[best_model_name]
 

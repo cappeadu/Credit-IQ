@@ -77,6 +77,18 @@ At minimum, record:
 - approval, review, and rejection rates;
 - false-approval and false-rejection rates.
 
+Baseline model selection should use a documented lexicographic policy:
+
+1. PR-AUC;
+2. recall;
+3. F1;
+4. specificity;
+5. ROC-AUC.
+
+PR-AUC is primary because default prediction is an imbalanced classification
+problem. This policy is a baseline and may be revised after threshold and
+calibration analysis, but model selection must not silently rely on one metric.
+
 The operational policy is:
 
 ```text

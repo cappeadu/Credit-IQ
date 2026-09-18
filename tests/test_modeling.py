@@ -68,10 +68,25 @@ class ModelingTests(unittest.TestCase):
             list(comparison_table(comparison_results)["model_name"]),
             ["second", "first"],
         )
-        self.assertEqual(
-            select_best_model(comparison_results, metric="recall"),
-            "second",
+        selected_model_name = select_best_model(
+            {
+                "model_a": {
+                    "pr_auc_score": 0.40,
+                    "recall": 0.90,
+                    "f1_score": 0.60,
+                    "specificity": 0.80,
+                    "roc_auc_score": 0.70,
+                },
+                "model_b": {
+                    "pr_auc_score": 0.45,
+                    "recall": 0.50,
+                    "f1_score": 0.55,
+                    "specificity": 0.85,
+                    "roc_auc_score": 0.75,
+                },
+            }
         )
+        self.assertEqual(selected_model_name, "model_b")
 
     def test_score_dataframe_returns_probability_and_decision(self):
         training_data = make_training_frame(row_count=2)

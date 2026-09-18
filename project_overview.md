@@ -102,6 +102,12 @@ Important metrics include:
 - false approvals and false rejections;
 - default rate within each decision group.
 
+For baseline candidate-model selection, use the following lexicographic policy:
+PR-AUC first, then recall, F1, specificity, and ROC-AUC. PR-AUC is the primary
+metric because the default target is imbalanced. This policy can be revised
+after calibration and threshold analysis, but the selection rule must remain
+explicit and reproducible.
+
 The operational decision policy is:
 
 ```text

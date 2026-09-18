@@ -29,6 +29,13 @@ from src.config import categorical_columns
 
 DEFAULT_RANDOM_STATE = 42
 MODEL_NAMES = ("Logistic Regression", "Random Forest", "XGBoost")
+DEFAULT_SELECTION_METRICS = (
+    "pr_auc_score",
+    "recall",
+    "f1_score",
+    "specificity",
+    "roc_auc_score",
+)
 
 
 def build_preprocessor(training_features: pd.DataFrame) -> ColumnTransformer:
@@ -214,7 +221,7 @@ def comparison_table(
     return (
         table[metric_columns]
         .sort_values(
-            by=["recall", "pr_auc_score"],
+            by=list(DEFAULT_SELECTION_METRICS),
             ascending=False,
         )
         .reset_index(drop=True)
@@ -224,18 +231,34 @@ def comparison_table(
 def select_best_model(
     comparison_results: Mapping[str, Mapping[str, Any]],
     *,
-    metric: str = "recall",
+    selection_metrics: tuple[str, ...] = DEFAULT_SELECTION_METRICS,
 ) -> str:
-    """Select the highest-scoring candidate using an explicit metric."""
+    """Select a candidate using a documented lexicographic metric policy.
+
+    PR-AUC is primary because the default target is imbalanced. Recall is the
+    first tie-breaker because missed defaults are important in this use case.
+    """
     if not comparison_results:
         raise ValueError("Cannot select a model from empty results.")
-    if any(metric not in result for result in comparison_results.values()):
-        raise ValueError(f"Selection metric is missing from model results: {metric}")
+    if not selection_metrics:
+        raise ValueError("At least one selection metric is required.")
+    missing_metrics = [
+        metric
+        for metric in selection_metrics
+        if any(metric not in result for result in comparison_results.values())
+    ]
+    if missing_metrics:
+        raise ValueError(
+            "Selection metrics are missing from model results: "
+            + ", ".join(missing_metrics)
+        )
 
     return max(
         comparison_results,
         key=lambda model_name: (
-            comparison_results[model_name][metric],
+            tuple(
+                comparison_results[model_name][metric] for metric in selection_metrics
+            ),
             model_name,
         ),
     )
