@@ -15,6 +15,7 @@ from src.data import (
 )
 from src.modeling import (
     build_candidate_models,
+    comparison_table,
     evaluate_candidate_models,
     select_best_model,
 )
@@ -34,69 +35,93 @@ def train(
     ] = None,
 ):
     # 1. load dataset
-    df = load_dataset(data_path=data_path, read_excel=True)
+    raw_dataset = load_dataset(data_path=data_path, read_excel=True)
 
     # 2. # clean columns and properly categorize columns
-    df = clean_cols(df)
-    validate_schema(df, require_target=True)
-    validate_numeric_values(df, include_target=True)
+    cleaned_dataset = clean_cols(raw_dataset)
+    validate_schema(cleaned_dataset, require_target=True)
+    validate_numeric_values(cleaned_dataset, include_target=True)
 
     # 3. split and save dataset
-    train_df, test_df = split_dataset(
-        df=df, save_dataset=True, path_to_save=path_to_save_val_test
+    training_data, holdout_data = split_dataset(
+        dataset=cleaned_dataset,
+        save_dataset=True,
+        path_to_save=path_to_save_val_test,
     )
-    val_df, test_df = split_dataset(df=test_df, test_size=0.5)
+    validation_data, test_data = split_dataset(
+        dataset=holdout_data,
+        test_size=0.5,
+    )
 
     # feature engineering
     feature_engineering = FeatureEngineering()
-    train_df_fe = feature_engineering.fit_transform(train_df)
-    val_df_fe = feature_engineering.transform(val_df)
-    test_df_fe = feature_engineering.transform(test_df)
-    for split_name, split_df in {
-        "train": train_df_fe,
-        "validation": val_df_fe,
-        "test": test_df_fe,
+    training_features = feature_engineering.fit_transform(training_data)
+    validation_features = feature_engineering.transform(validation_data)
+    test_features = feature_engineering.transform(test_data)
+    for split_name, split_features in {
+        "train": training_features,
+        "validation": validation_features,
+        "test": test_features,
     }.items():
         try:
-            validate_feature_engineered_schema(split_df, require_target=True)
+            validate_feature_engineered_schema(
+                split_features,
+                require_target=True,
+            )
         except (TypeError, ValueError) as exc:
             raise ValueError(
                 f"Invalid feature-engineered {split_name} split: {exc}"
             ) from exc
-    test_df_fe.to_csv(f"{path_to_save_test_only}/test_only.csv", index=False)
-
-    X_train_fe, y_train_fe = train_df_fe.drop("target", axis=1), train_df_fe["target"]
-    X_val_fe, y_val_fe = val_df_fe.drop("target", axis=1), val_df_fe["target"]
-    # X_test_fe, y_test_fe = test_df_fe.drop("target", axis=1), test_df_fe["target"]
-
-    models = build_candidate_models(X_train_fe, y_train_fe)
-    models_feature_eng, results = evaluate_candidate_models(
-        models,
-        X_train_fe,
-        y_train_fe,
-        X_val_fe,
-        y_val_fe,
+    test_features.to_csv(
+        f"{path_to_save_test_only}/test_only.csv",
+        index=False,
     )
+
+    training_features, training_target = (
+        training_features.drop("target", axis=1),
+        training_features["target"],
+    )
+    validation_features, validation_target = (
+        validation_features.drop("target", axis=1),
+        validation_features["target"],
+    )
+
+    candidate_models = build_candidate_models(
+        training_features,
+        training_target,
+    )
+    fitted_candidate_models, comparison_results = evaluate_candidate_models(
+        candidate_models,
+        training_features,
+        training_target,
+        validation_features,
+        validation_target,
+    )
+    print(comparison_table(comparison_results).to_string(index=False))
 
     # Keep the current selection policy explicit; later evaluation stages can
     # replace this with a documented multi-metric policy.
-    best_model_name = select_best_model(results, metric="recall")
+    best_model_name = select_best_model(comparison_results, metric="recall")
     print(f"Best model: {best_model_name}")
-    best_model = models_feature_eng[best_model_name]
+    selected_model = fitted_candidate_models[best_model_name]
 
     # calibrated model
-    final_model = CalibratedClassifierCV(estimator=best_model, method="isotonic", cv=5)
-    final_model.fit(X_train_fe, y_train_fe)
-    file_name = ROOT / "artifacts/calibrated_model.joblib"
-    joblib.dump(final_model, file_name)
+    calibrated_model = CalibratedClassifierCV(
+        estimator=selected_model,
+        method="isotonic",
+        cv=5,
+    )
+    calibrated_model.fit(training_features, training_target)
+    calibrated_model_path = ROOT / "artifacts/calibrated_model.joblib"
+    joblib.dump(calibrated_model, calibrated_model_path)
 
     # save underlying model for shap analysis
-    best_model_file_name = ROOT / f"artifacts/{best_model_name}.joblib"
-    joblib.dump(best_model, best_model_file_name)
+    selected_model_path = ROOT / f"artifacts/{best_model_name}.joblib"
+    joblib.dump(selected_model, selected_model_path)
 
     # save feature engineering object
-    feat_eng_path = ROOT / "artifacts/feature_engineering.joblib"
-    joblib.dump(feature_engineering, feat_eng_path)
+    feature_engineering_path = ROOT / "artifacts/feature_engineering.joblib"
+    joblib.dump(feature_engineering, feature_engineering_path)
 
     # save thresholds per eda notebook
     thresholds = json.dumps(THRESHOLDS, indent=2)
@@ -105,7 +130,7 @@ def train(
         f.write(thresholds)
 
     # save metrics
-    results_json = json.dumps(results, indent=2)
+    results_json = json.dumps(comparison_results, indent=2)
     metrics_path = ROOT / "metrics/val_set.json"
     with metrics_path.open("w") as f:
         f.write(results_json)

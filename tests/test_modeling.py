@@ -6,6 +6,7 @@ from sklearn.dummy import DummyClassifier
 
 from src.modeling import (
     build_candidate_models,
+    comparison_table,
     evaluate_candidate_models,
     select_best_model,
 )
@@ -26,13 +27,13 @@ def make_training_frame(row_count=8):
 
 class ModelingTests(unittest.TestCase):
     def test_candidate_registry_supports_model_specific_parameters(self):
-        frame = make_training_frame()
-        X = frame.drop(columns=["target"])
-        y = frame["target"]
+        training_data = make_training_frame()
+        training_features = training_data.drop(columns=["target"])
+        training_target = training_data["target"]
 
         models = build_candidate_models(
-            X,
-            y,
+            training_features,
+            training_target,
             model_params={"Random Forest": {"n_estimators": 7}},
         )
 
@@ -43,25 +44,39 @@ class ModelingTests(unittest.TestCase):
         self.assertEqual(models["Random Forest"].n_estimators, 7)
 
     def test_candidate_evaluation_returns_fitted_models_and_metrics(self):
-        frame = make_training_frame()
-        X = frame.drop(columns=["target"])
-        y = frame["target"]
-        models = {
+        training_data = make_training_frame()
+        training_features = training_data.drop(columns=["target"])
+        training_target = training_data["target"]
+        candidate_models = {
             "first": DummyClassifier(strategy="prior"),
             "second": DummyClassifier(strategy="uniform", random_state=42),
         }
 
-        fitted, results = evaluate_candidate_models(models, X, y, X, y)
+        fitted_models, comparison_results = evaluate_candidate_models(
+            candidate_models,
+            training_features,
+            training_target,
+            training_features,
+            training_target,
+        )
 
-        self.assertEqual(set(fitted), set(models))
-        self.assertEqual(set(results), set(models))
-        self.assertIn("roc_auc_score", results["first"])
-        self.assertEqual(select_best_model(results, metric="recall"), "second")
+        self.assertEqual(set(fitted_models), set(candidate_models))
+        self.assertEqual(set(comparison_results), set(candidate_models))
+        self.assertIn("pr_auc_score", comparison_results["first"])
+        self.assertIn("specificity", comparison_results["first"])
+        self.assertEqual(
+            list(comparison_table(comparison_results)["model_name"]),
+            ["second", "first"],
+        )
+        self.assertEqual(
+            select_best_model(comparison_results, metric="recall"),
+            "second",
+        )
 
     def test_score_dataframe_returns_probability_and_decision(self):
-        frame = make_training_frame(row_count=2)
+        training_data = make_training_frame(row_count=2)
         feature_engineering = FeatureEngineering()
-        feature_engineered = feature_engineering.fit_transform(frame)
+        feature_engineered_data = feature_engineering.fit_transform(training_data)
 
         class FixedModel:
             def predict_proba(self, X):
@@ -70,11 +85,11 @@ class ModelingTests(unittest.TestCase):
             def predict(self, X):
                 return np.ones(len(X), dtype=int)
 
-        scored = score_dataframe(FixedModel(), feature_engineered)
+        scored_data = score_dataframe(FixedModel(), feature_engineered_data)
 
-        self.assertTrue(np.allclose(scored["probability"], 0.8))
-        self.assertTrue((scored["prediction_at_threshold"] == 1).all())
-        self.assertTrue((scored["decision"] == "REJECT").all())
+        self.assertTrue(np.allclose(scored_data["probability"], 0.8))
+        self.assertTrue((scored_data["prediction_at_threshold"] == 1).all())
+        self.assertTrue((scored_data["decision"] == "REJECT").all())
 
 
 if __name__ == "__main__":

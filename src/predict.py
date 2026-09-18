@@ -25,14 +25,14 @@ def load_test_set(test_set_path: str | Path) -> pd.DataFrame:
     if not test_file.exists():
         raise FileNotFoundError(f"Test set was not found: {test_file}")
 
-    df = pd.read_csv(test_file)
-    validate_feature_engineered_schema(df, require_target=True)
-    return df
+    test_data = pd.read_csv(test_file)
+    validate_feature_engineered_schema(test_data, require_target=True)
+    return test_data
 
 
 def score_dataframe(
-    model,
-    df: pd.DataFrame,
+    prediction_model,
+    feature_engineered_data: pd.DataFrame,
     *,
     threshold: float = 0.30,
     lower_threshold: float = 0.12,
@@ -47,50 +47,79 @@ def score_dataframe(
         )
 
     validate_feature_engineered_schema(
-        df,
-        require_target=TARGET_COLUMN in df.columns,
+        feature_engineered_data,
+        require_target=TARGET_COLUMN in feature_engineered_data.columns,
     )
-    X = df.drop(columns=[TARGET_COLUMN], errors="ignore")
-    if not np.isfinite(X[MODEL_FEATURE_COLUMNS].to_numpy(dtype=float)).all():
+    model_features = feature_engineered_data.drop(
+        columns=[TARGET_COLUMN],
+        errors="ignore",
+    )
+    if not np.isfinite(
+        model_features[MODEL_FEATURE_COLUMNS].to_numpy(dtype=float)
+    ).all():
         raise ValueError("Model input contains non-finite values.")
 
-    scored = df.copy()
-    scored["probability"] = model.predict_proba(X)[:, 1]
-    scored["prediction_raw"] = model.predict(X)
-    scored["prediction_at_threshold"] = (
-        scored["probability"] >= threshold
+    scored_data = feature_engineered_data.copy()
+    scored_data["probability"] = prediction_model.predict_proba(
+        model_features
+    )[:, 1]
+    scored_data["prediction_raw"] = prediction_model.predict(model_features)
+    scored_data["prediction_at_threshold"] = (
+        scored_data["probability"] >= threshold
     ).astype(int)
-    scored["decision"] = scored["probability"].apply(
+    scored_data["decision"] = scored_data["probability"].apply(
         lambda probability: loan_decision(
             probability,
             lower_threshold=lower_threshold,
             upper_threshold=upper_threshold,
         )
     )
-    return scored
+    return scored_data
 
 
 def evaluate_predictions(
-    scored_df: pd.DataFrame,
+    scored_data: pd.DataFrame,
     *,
     prediction_column: str = "prediction_at_threshold",
 ) -> dict[str, float]:
     """Evaluate scored labelled data using one explicit prediction column."""
-    if TARGET_COLUMN not in scored_df:
+    if TARGET_COLUMN not in scored_data:
         raise ValueError("Evaluation requires a target column.")
-    if prediction_column not in scored_df:
+    if prediction_column not in scored_data:
         raise ValueError(f"Prediction column was not found: {prediction_column}")
 
-    target = scored_df[TARGET_COLUMN]
-    probabilities = scored_df["probability"]
-    predictions = scored_df[prediction_column]
+    target_values = scored_data[TARGET_COLUMN]
+    predicted_probabilities = scored_data["probability"]
+    predicted_classes = scored_data[prediction_column]
     return {
-        "roc_auc_score": round(roc_auc_score(target, probabilities), 4),
-        "recall": round(recall_score(target, predictions, zero_division=0), 4),
-        "precision": round(
-            precision_score(target, predictions, zero_division=0), 4
+        "roc_auc_score": round(
+            roc_auc_score(target_values, predicted_probabilities),
+            4,
         ),
-        "f1_score": round(f1_score(target, predictions, zero_division=0), 4),
+        "recall": round(
+            recall_score(
+                target_values,
+                predicted_classes,
+                zero_division=0,
+            ),
+            4,
+        ),
+        "precision": round(
+            precision_score(
+                target_values,
+                predicted_classes,
+                zero_division=0,
+            ),
+            4,
+        ),
+        "f1_score": round(
+            f1_score(
+                target_values,
+                predicted_classes,
+                zero_division=0,
+            ),
+            4,
+        ),
     }
 
 
@@ -103,16 +132,16 @@ def test_predictions(
     if not model_file.exists():
         raise FileNotFoundError(f"Calibrated model was not found: {model_file}")
 
-    df = load_test_set(test_set_path)
+    test_data = load_test_set(test_set_path)
     calibrated_model = joblib.load(model_file)
-    scored = score_dataframe(calibrated_model, df)
+    scored_data = score_dataframe(calibrated_model, test_data)
 
     test_metrics = {
         "default_threshold(0.5)": evaluate_predictions(
-            score_dataframe(calibrated_model, df, threshold=0.5),
+            score_dataframe(calibrated_model, test_data, threshold=0.5),
             prediction_column="prediction_at_threshold",
         ),
-        "operational_threshold(0.3)": evaluate_predictions(scored),
+        "operational_threshold(0.3)": evaluate_predictions(scored_data),
     }
 
     all_metrics = json.dumps(test_metrics, indent=2)
@@ -122,7 +151,7 @@ def test_predictions(
 
     # save test csv
     test_set_with_prob_path = ROOT / "artifacts/scored_customers.csv"
-    scored.to_csv(test_set_with_prob_path, index=False)
+    scored_data.to_csv(test_set_with_prob_path, index=False)
     return all_metrics
 
 
