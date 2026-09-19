@@ -2,7 +2,11 @@ import unittest
 
 import pandas as pd
 
-from src.tracking import fingerprint_dataframe, flatten_comparison_metrics
+from src.tracking import (
+    fingerprint_dataframe,
+    flatten_comparison_metrics,
+    flatten_numeric_metrics,
+)
 
 
 class TrackingTests(unittest.TestCase):
@@ -40,6 +44,25 @@ class TrackingTests(unittest.TestCase):
         self.assertNotEqual(
             fingerprint_dataframe(original_data),
             fingerprint_dataframe(changed_data),
+        )
+
+    def test_nested_evaluation_report_metrics_are_flattened(self):
+        self.assertEqual(
+            flatten_numeric_metrics(
+                {
+                    "operational_policy": {
+                        "binary_metrics": {"recall": 0.8},
+                        "decision_rates": {"REJECT": 0.2},
+                    },
+                    "calibration": {"brier_score": 0.1},
+                    "calibration_bins": [{"sample_count": 5}],
+                }
+            ),
+            {
+                "operational_policy.binary_metrics.recall": 0.8,
+                "operational_policy.decision_rates.REJECT": 0.2,
+                "calibration.brier_score": 0.1,
+            },
         )
 
 

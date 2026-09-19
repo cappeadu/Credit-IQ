@@ -44,6 +44,24 @@ def flatten_comparison_metrics(
     return flattened_metrics
 
 
+def flatten_numeric_metrics(
+    values: Mapping[str, Any],
+    *,
+    prefix: str = "",
+) -> dict[str, float]:
+    """Flatten numeric values in a nested evaluation report for MLflow."""
+    flattened_metrics: dict[str, float] = {}
+    for name, value in values.items():
+        metric_name = f"{prefix}.{name}" if prefix else name
+        if isinstance(value, Mapping):
+            flattened_metrics.update(
+                flatten_numeric_metrics(value, prefix=metric_name)
+            )
+        elif isinstance(value, (int, float)) and not isinstance(value, bool):
+            flattened_metrics[metric_name] = float(value)
+    return flattened_metrics
+
+
 def fingerprint_dataframe(data_frame: pd.DataFrame) -> str:
     """Return a stable SHA-256 fingerprint for a dataset's content and schema."""
     hasher = hashlib.sha256()
@@ -134,6 +152,7 @@ def log_baseline_comparison_run(
     artifact_paths: Mapping[str, Path],
     reproducibility_metadata: Mapping[str, Any],
     feature_schema: Mapping[str, Any],
+    validation_report: Mapping[str, Any],
 ) -> str:
     """Log a parent comparison run and one nested run per candidate model."""
     configure_mlflow()
@@ -153,7 +172,16 @@ def log_baseline_comparison_run(
         mlflow.log_param("selected_model", selected_model_name)
         mlflow.log_param("selection_metrics", " > ".join(selection_metrics))
         mlflow.log_metrics(flatten_comparison_metrics(comparison_results))
+        mlflow.log_metrics(
+            {
+                f"validation.{metric_name}": metric_value
+                for metric_name, metric_value in flatten_numeric_metrics(
+                    validation_report
+                ).items()
+            }
+        )
         mlflow.set_tag("stage", "baseline-model-comparison")
+        mlflow.set_tag("dataset_role", "validation")
         mlflow.set_tag("selected_model", selected_model_name)
         mlflow.set_tag(
             "feature_version",
@@ -164,6 +192,7 @@ def log_baseline_comparison_run(
             str(reproducibility_metadata.get("dataset_fingerprint", "unknown")),
         )
         mlflow.log_dict(dict(feature_schema), "feature_schema.json")
+        mlflow.log_dict(dict(validation_report), "evaluation/validation_report.json")
 
         for model_name, fitted_model in fitted_candidate_models.items():
             with mlflow.start_run(
@@ -197,3 +226,37 @@ def log_baseline_comparison_run(
         expected_candidate_models=set(fitted_candidate_models),
     )
     return parent_run_id
+
+
+def log_dataset_evaluation_run(
+    *,
+    dataset_role: str,
+    dataset_fingerprint: str,
+    evaluation_report: Mapping[str, Any],
+    artifact_paths: Mapping[str, Path] | None = None,
+    source_training_run_id: str | None = None,
+) -> str:
+    """Log evaluation results for a labelled dataset with an explicit role."""
+    if not dataset_role.strip():
+        raise ValueError("dataset_role must not be empty.")
+
+    configure_mlflow()
+    with mlflow.start_run(run_name=f"{dataset_role}-evaluation") as evaluation_run:
+        mlflow.set_tag("run_type", "dataset-evaluation")
+        mlflow.set_tag("dataset_role", dataset_role)
+        if source_training_run_id:
+            mlflow.set_tag("source_training_run_id", source_training_run_id)
+        mlflow.log_params(
+            {
+                "dataset_role": dataset_role,
+                "dataset_fingerprint": dataset_fingerprint,
+            }
+        )
+        mlflow.log_metrics(flatten_numeric_metrics(evaluation_report))
+        mlflow.log_dict(dict(evaluation_report), "evaluation_report.json")
+
+        for artifact_name, artifact_path in (artifact_paths or {}).items():
+            if artifact_path.exists():
+                mlflow.log_artifact(str(artifact_path), artifact_path=artifact_name)
+
+        return evaluation_run.info.run_id

@@ -23,7 +23,11 @@ from src.data import (
     validate_numeric_values,
     validate_schema,
 )
-from src.evaluation import select_thresholds
+from src.evaluation import (
+    analyze_calibration,
+    evaluate_threshold_policy,
+    select_thresholds,
+)
 from src.modeling import (
     DEFAULT_SELECTION_METRICS,
     build_candidate_models,
@@ -181,9 +185,23 @@ def train(
         f.write(thresholds)
 
     # save metrics
+    calibrated_validation_evaluation = {
+        "thresholds": selected_thresholds,
+        "operational_policy": evaluate_threshold_policy(
+            validation_target,
+            validation_probabilities,
+            lower_threshold=selected_thresholds["lower_threshold"],
+            upper_threshold=selected_thresholds["upper_threshold"],
+        ),
+        "calibration": analyze_calibration(
+            validation_target,
+            validation_probabilities,
+        ),
+    }
     validation_report = {
         "model_comparison": comparison_results,
         "threshold_selection": threshold_selection,
+        "calibrated_validation_evaluation": calibrated_validation_evaluation,
     }
     results_json = json.dumps(validation_report, indent=2)
     metrics_path = ROOT / "metrics/val_set.json"
@@ -218,6 +236,7 @@ def train(
             "model_features": MODEL_FEATURE_COLUMNS,
             "target": "target",
         },
+        validation_report=validation_report,
         artifact_paths={
             "metrics": metrics_path,
             "model": calibrated_model_path,

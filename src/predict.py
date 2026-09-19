@@ -11,13 +11,17 @@ from src.config import ROOT, THRESHOLDS
 from src.data import (
     MODEL_FEATURE_COLUMNS,
     TARGET_COLUMN,
-    validate_schema,
     validate_feature_engineered_schema,
+    validate_schema,
 )
 from src.evaluation import (
     analyze_calibration,
     evaluate_binary_predictions,
     evaluate_threshold_policy,
+)
+from src.tracking import (
+    fingerprint_dataframe,
+    log_dataset_evaluation_run,
 )
 from src.utils import loan_decision
 
@@ -284,6 +288,12 @@ def evaluate_dataset_command(
     dataset_name: Annotated[
         str, typer.Option(help="dataset name used for default output paths")
     ] = "dataset",
+    dataset_role: Annotated[
+        str, typer.Option(help="MLflow dataset role, such as validation or test")
+    ] = "evaluation",
+    source_training_run_id: Annotated[
+        str, typer.Option(help="optional MLflow training run ID")
+    ] = None,
 ):
     raw_evaluation_data = load_raw_dataset(data_path, require_target=True)
     feature_engineering = _load_feature_engineering(model_path)
@@ -312,11 +322,23 @@ def evaluate_dataset_command(
     )
     metrics_file.parent.mkdir(parents=True, exist_ok=True)
     metrics_file.write_text(json.dumps(evaluation_metrics, indent=2))
-    _write_scored_dataset(
+    scored_output_file = _write_scored_dataset(
         scored_data,
         output_path=None,
         dataset_name=dataset_name,
     )
+    evaluation_run_id = log_dataset_evaluation_run(
+        dataset_role=dataset_role,
+        dataset_fingerprint=fingerprint_dataframe(raw_evaluation_data),
+        evaluation_report=evaluation_metrics,
+        artifact_paths={
+            "metrics": metrics_file,
+            "scored_data": scored_output_file,
+        },
+        source_training_run_id=source_training_run_id,
+    )
+    evaluation_metrics["mlflow_run_id"] = evaluation_run_id
+    metrics_file.write_text(json.dumps(evaluation_metrics, indent=2))
     return json.dumps(evaluation_metrics, indent=2)
 
 
