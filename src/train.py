@@ -1,11 +1,19 @@
 import json
+from pathlib import Path
 
 import joblib
 import typer
 from sklearn.calibration import CalibratedClassifierCV
 from typing_extensions import Annotated
 
-from src.config import FEATURE_VERSION, ROOT, THRESHOLDS
+from src.config import (
+    FEATURE_VERSION,
+    MAX_FALSE_APPROVAL_RATE,
+    ROOT,
+    THRESHOLD_LOWER_CANDIDATES,
+    THRESHOLD_SELECTION_METRIC,
+    THRESHOLD_UPPER_CANDIDATES,
+)
 from src.data import (
     MODEL_FEATURE_COLUMNS,
     RAW_FEATURE_COLUMNS,
@@ -15,6 +23,7 @@ from src.data import (
     validate_numeric_values,
     validate_schema,
 )
+from src.evaluation import select_thresholds
 from src.modeling import (
     DEFAULT_SELECTION_METRICS,
     build_candidate_models,
@@ -55,25 +64,41 @@ def train(
     dataset_fingerprint = fingerprint_dataframe(cleaned_dataset)
 
     # 3. split and save dataset
+    split_output_dir = (
+        ROOT / "data/val_test"
+        if path_to_save_val_test is None
+        else Path(path_to_save_val_test)
+    )
     training_data, holdout_data = split_dataset(
         dataset=cleaned_dataset,
         save_dataset=True,
-        path_to_save=path_to_save_val_test,
+        path_to_save=split_output_dir,
     )
     validation_data, test_data = split_dataset(
         dataset=holdout_data,
         test_size=0.5,
     )
 
+    # Persist the raw/cleaned validation and test splits. Feature engineering
+    # is applied later by the same artifact used during prediction.
+    validation_output_dir = split_output_dir
+    validation_output_dir.mkdir(parents=True, exist_ok=True)
+    validation_data.to_csv(validation_output_dir / "validation_set.csv", index=False)
+    test_output_dir = (
+        ROOT / "data/test_only"
+        if path_to_save_test_only is None
+        else Path(path_to_save_test_only)
+    )
+    test_output_dir.mkdir(parents=True, exist_ok=True)
+    test_data.to_csv(test_output_dir / "test_only.csv", index=False)
+
     # feature engineering
     feature_engineering = FeatureEngineering()
     training_features = feature_engineering.fit_transform(training_data)
     validation_features = feature_engineering.transform(validation_data)
-    test_features = feature_engineering.transform(test_data)
     for split_name, split_features in {
         "train": training_features,
         "validation": validation_features,
-        "test": test_features,
     }.items():
         try:
             validate_feature_engineered_schema(
@@ -84,11 +109,6 @@ def train(
             raise ValueError(
                 f"Invalid feature-engineered {split_name} split: {exc}"
             ) from exc
-    test_features.to_csv(
-        f"{path_to_save_test_only}/test_only.csv",
-        index=False,
-    )
-
     training_features, training_target = (
         training_features.drop("target", axis=1),
         training_features["target"],
@@ -124,6 +144,16 @@ def train(
         cv=5,
     )
     calibrated_model.fit(training_features, training_target)
+    validation_probabilities = calibrated_model.predict_proba(validation_features)[:, 1]
+    threshold_selection = select_thresholds(
+        validation_target,
+        validation_probabilities,
+        lower_thresholds=THRESHOLD_LOWER_CANDIDATES,
+        upper_thresholds=THRESHOLD_UPPER_CANDIDATES,
+        selection_metric=THRESHOLD_SELECTION_METRIC,
+        maximum_false_approval_rate=MAX_FALSE_APPROVAL_RATE,
+    )
+    selected_thresholds = threshold_selection["selected_thresholds"]
     calibrated_model_path = ROOT / "artifacts/calibrated_model.joblib"
     joblib.dump(calibrated_model, calibrated_model_path)
 
@@ -135,14 +165,27 @@ def train(
     feature_engineering_path = ROOT / "artifacts/feature_engineering.joblib"
     joblib.dump(feature_engineering, feature_engineering_path)
 
-    # save thresholds per eda notebook
-    thresholds = json.dumps(THRESHOLDS, indent=2)
+    # Save thresholds selected from calibrated validation probabilities.
+    thresholds = json.dumps(
+        {
+            **selected_thresholds,
+            "selection_metric": threshold_selection["selection_metric"],
+            "maximum_false_approval_rate": threshold_selection[
+                "maximum_false_approval_rate"
+            ],
+        },
+        indent=2,
+    )
     thresholds_path = ROOT / "artifacts/thresholds.json"
     with thresholds_path.open("w") as f:
         f.write(thresholds)
 
     # save metrics
-    results_json = json.dumps(comparison_results, indent=2)
+    validation_report = {
+        "model_comparison": comparison_results,
+        "threshold_selection": threshold_selection,
+    }
+    results_json = json.dumps(validation_report, indent=2)
     metrics_path = ROOT / "metrics/val_set.json"
     with metrics_path.open("w") as f:
         f.write(results_json)

@@ -24,6 +24,12 @@ The repository currently contains:
 
 The existing implementation trains models from the credit-card dataset, creates engineered payment and utilisation features, calibrates a selected classifier, generates scored customers, and displays portfolio and customer-level information in Streamlit. The workflow will be progressively reorganised so the same preprocessing, model, threshold, and explanation behaviour is used everywhere.
 
+Saved train, validation, and test datasets are kept in the cleaned raw schema.
+The feature-engineering artifact is applied after loading a dataset and before
+model scoring. This keeps evaluation and future API prediction on the same
+transformation path and allows learned preprocessing to be fitted on training
+data only if it is introduced later.
+
 ## Planned architecture
 
 ```text
@@ -143,6 +149,17 @@ probability >= upper_threshold       REJECT
 ```
 
 Thresholds should be selected on validation data using documented business assumptions or cost trade-offs, then frozen before final test evaluation. The current threshold values are candidates to evaluate, not permanent truths.
+
+Prediction and evaluation are dataset-role independent. The scoring command can
+score labelled or unlabelled feature-engineered data, while the evaluation
+command requires labels and can evaluate validation, test, or another labelled
+dataset. The caller supplies the dataset name and output path; the code does
+not assume that every labelled dataset is the final test set.
+
+```powershell
+python -m src.predict score --data-path data/new_customers.csv --model-path artifacts
+python -m src.predict evaluate --data-path data/test_only/test_only.csv --model-path artifacts --dataset-name test
+```
 
 ## FastAPI interface
 

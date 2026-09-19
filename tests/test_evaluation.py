@@ -93,6 +93,20 @@ class EvaluationTests(unittest.TestCase):
             {"lower_threshold": 0.1, "upper_threshold": 0.5},
         )
 
+    def test_threshold_selection_applies_false_approval_constraint(self):
+        selection = select_thresholds(
+            target_values=[0, 1, 1, 1],
+            predicted_probabilities=[0.05, 0.06, 0.4, 0.9],
+            lower_thresholds=[0.05, 0.1],
+            upper_thresholds=[0.5],
+            maximum_false_approval_rate=0.05,
+        )
+
+        self.assertEqual(
+            selection["selected_thresholds"],
+            {"lower_threshold": 0.05, "upper_threshold": 0.5},
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

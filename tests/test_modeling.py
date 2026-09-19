@@ -106,6 +106,30 @@ class ModelingTests(unittest.TestCase):
         self.assertTrue((scored_data["prediction_at_threshold"] == 1).all())
         self.assertTrue((scored_data["decision"] == "REJECT").all())
 
+    def test_score_dataframe_uses_explicit_threshold_boundaries(self):
+        training_data = make_training_frame(row_count=4)
+        feature_engineered_data = FeatureEngineering().fit_transform(training_data)
+
+        class BoundaryModel:
+            def predict_proba(self, X):
+                probabilities = np.array([0.09, 0.10, 0.29, 0.30])
+                return np.column_stack([1 - probabilities, probabilities])
+
+            def predict(self, X):
+                return np.zeros(len(X), dtype=int)
+
+        scored_data = score_dataframe(
+            BoundaryModel(),
+            feature_engineered_data,
+            lower_threshold=0.10,
+            upper_threshold=0.30,
+        )
+
+        self.assertEqual(
+            list(scored_data["decision"]),
+            ["APPROVE", "REVIEW", "REVIEW", "REJECT"],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
