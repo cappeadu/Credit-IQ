@@ -35,13 +35,14 @@ from src.modeling import (
     evaluate_candidate_models,
     select_best_model,
 )
+from src.splitting import create_or_load_splits
 from src.tracking import (
     configure_mlflow,
     fingerprint_dataframe,
     get_repository_revision,
     log_baseline_comparison_run,
 )
-from src.utils import FeatureEngineering, split_dataset
+from src.utils import FeatureEngineering
 
 app = typer.Typer()
 
@@ -54,6 +55,9 @@ def train(
     ] = None,
     path_to_save_test_only: Annotated[
         str, typer.Option(help="path to save test set only")
+    ] = None,
+    split_manifest_path: Annotated[
+        str, typer.Option(help="path to the persisted split manifest")
     ] = None,
 ):
     configure_mlflow()
@@ -73,15 +77,20 @@ def train(
         if path_to_save_val_test is None
         else Path(path_to_save_val_test)
     )
-    training_data, holdout_data = split_dataset(
+    manifest_file = (
+        split_output_dir / "split_manifest.json"
+        if split_manifest_path is None
+        else Path(split_manifest_path)
+    )
+    training_data, validation_data, test_data, split_manifest = create_or_load_splits(
         dataset=cleaned_dataset,
-        save_dataset=True,
-        path_to_save=split_output_dir,
+        manifest_path=manifest_file,
+        dataset_fingerprint=dataset_fingerprint,
+        random_state=42,
     )
-    validation_data, test_data = split_dataset(
-        dataset=holdout_data,
-        test_size=0.5,
-    )
+    split_output_dir.mkdir(parents=True, exist_ok=True)
+    training_data.to_csv(split_output_dir / "train_set.csv", index=False)
+    validation_data.to_csv(split_output_dir / "validation_set.csv", index=False)
 
     # Persist the raw/cleaned validation and test splits. Feature engineering
     # is applied later by the same artifact used during prediction.
@@ -202,6 +211,7 @@ def train(
         "model_comparison": comparison_results,
         "threshold_selection": threshold_selection,
         "calibrated_validation_evaluation": calibrated_validation_evaluation,
+        "split_manifest": split_manifest,
     }
     results_json = json.dumps(validation_report, indent=2)
     metrics_path = ROOT / "metrics/val_set.json"
@@ -229,6 +239,7 @@ def train(
             "training_row_count": len(training_data),
             "validation_row_count": len(validation_data),
             "test_row_count": len(test_data),
+            "split_manifest_path": manifest_file,
         },
         feature_schema={
             "feature_version": FEATURE_VERSION,

@@ -30,6 +30,12 @@ model scoring. This keeps evaluation and future API prediction on the same
 transformation path and allows learned preprocessing to be fitted on training
 data only if it is introduced later.
 
+Training also persists a split manifest. Existing records retain their original
+train, validation, or test membership on retraining; newly added records are
+assigned to training. If records from a frozen split are removed, training stops
+instead of silently changing the evaluation population. The manifest is stored
+alongside the split data as `split_manifest.json`.
+
 ## Planned architecture
 
 ```text
