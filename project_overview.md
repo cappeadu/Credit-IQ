@@ -156,9 +156,81 @@ command requires labels and can evaluate validation, test, or another labelled
 dataset. The caller supplies the dataset name and output path; the code does
 not assume that every labelled dataset is the final test set.
 
+Evaluation runs are also tracked in MLflow with the supplied dataset role and a
+dataset fingerprint. The training parent run contains validation evaluation;
+later evaluation commands create separate runs for roles such as `test` or
+`external_evaluation` and can link them to the source training run.
+
 ```powershell
 python -m src.predict score --data-path data/new_customers.csv --model-path artifacts
-python -m src.predict evaluate --data-path data/test_only/test_only.csv --model-path artifacts --dataset-name test
+python -m src.predict evaluate --data-path data/test_only/test_only.csv --model-path artifacts --dataset-name test --dataset-role test
+```
+
+## PowerShell command reference
+
+Run these commands from the repository root. Use separate PowerShell terminals
+for the MLflow server and training/evaluation commands.
+
+```powershell
+# Move to the project root
+Set-Location "C:\Users\Lenovo\code\Credit Card"
+
+# Run the automated tests
+python -B -m unittest discover -s tests -v
+```
+
+Start MLflow in the first terminal:
+
+```powershell
+mlflow server `
+  --backend-store-uri sqlite:///mlflow.db `
+  --default-artifact-root ./mlruns `
+  --host 127.0.0.1 `
+  --port 5000
+```
+
+Run training in a second terminal:
+
+```powershell
+python -m src.train `
+  --data-path data/credit_card.xls `
+  --path-to-save-val-test data/split `
+  --path-to-save-test-only data/test_only
+```
+
+After training, save the printed MLflow parent run ID and inspect the run:
+
+```powershell
+$PARENT_RUN_ID = "paste-parent-run-id-here"
+python -B scripts/verify_mlflow_run.py $PARENT_RUN_ID
+```
+
+Evaluate the frozen model and thresholds on a labelled dataset:
+
+```powershell
+python -m src.predict evaluate `
+  --data-path data/test_only/test_only.csv `
+  --model-path artifacts `
+  --dataset-name test `
+  --dataset-role test `
+  --source-training-run-id $PARENT_RUN_ID
+```
+
+Score another cleaned, unlabelled dataset:
+
+```powershell
+python -m src.predict score `
+  --data-path data/new_customers.csv `
+  --model-path artifacts `
+  --dataset-name new_customers
+```
+
+Review generated reports and thresholds:
+
+```powershell
+Get-Content artifacts/thresholds.json
+Get-Content metrics/test.json
+Get-Content metrics/val_set.json
 ```
 
 ## FastAPI interface
