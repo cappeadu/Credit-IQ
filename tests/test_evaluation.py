@@ -1,6 +1,6 @@
 import unittest
 
-from src.evaluation import evaluate_binary_predictions
+from src.evaluation import analyze_calibration, evaluate_binary_predictions
 
 
 class EvaluationTests(unittest.TestCase):
@@ -35,6 +35,26 @@ class EvaluationTests(unittest.TestCase):
                 target_values=[0, 1],
                 predicted_probabilities=[-0.1, 1.1],
                 predicted_classes=[0, 1],
+            )
+
+    def test_calibration_analysis_returns_bins_and_brier_score(self):
+        calibration = analyze_calibration(
+            target_values=[0, 0, 1, 1],
+            predicted_probabilities=[0.1, 0.2, 0.8, 0.9],
+            number_of_bins=2,
+        )
+
+        self.assertEqual(calibration["brier_score"], 0.025)
+        self.assertEqual(calibration["number_of_bins"], 2)
+        self.assertEqual(len(calibration["calibration_bins"]), 2)
+        self.assertEqual(calibration["calibration_bins"][0]["sample_count"], 2.0)
+
+    def test_calibration_analysis_rejects_invalid_bin_count(self):
+        with self.assertRaises(ValueError):
+            analyze_calibration(
+                target_values=[0, 1],
+                predicted_probabilities=[0.2, 0.8],
+                number_of_bins=1,
             )
 
 
