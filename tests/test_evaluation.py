@@ -1,6 +1,11 @@
 import unittest
 
-from src.evaluation import analyze_calibration, evaluate_binary_predictions
+from src.evaluation import (
+    analyze_calibration,
+    evaluate_binary_predictions,
+    evaluate_threshold_policy,
+    select_thresholds,
+)
 
 
 class EvaluationTests(unittest.TestCase):
@@ -56,6 +61,37 @@ class EvaluationTests(unittest.TestCase):
                 predicted_probabilities=[0.2, 0.8],
                 number_of_bins=1,
             )
+
+    def test_threshold_policy_reports_decision_rates_and_error_rates(self):
+        policy = evaluate_threshold_policy(
+            target_values=[0, 0, 1, 1],
+            predicted_probabilities=[0.05, 0.2, 0.6, 0.9],
+            lower_threshold=0.1,
+            upper_threshold=0.5,
+        )
+
+        self.assertEqual(policy["decision_counts"], {
+            "APPROVE": 1,
+            "REVIEW": 1,
+            "REJECT": 2,
+        })
+        self.assertEqual(policy["false_approval_rate"], 0.0)
+        self.assertEqual(policy["false_rejection_rate"], 0.0)
+
+    def test_threshold_selection_returns_the_best_documented_candidate(self):
+        selection = select_thresholds(
+            target_values=[0, 0, 1, 1],
+            predicted_probabilities=[0.05, 0.2, 0.6, 0.9],
+            lower_thresholds=[0.1, 0.3],
+            upper_thresholds=[0.5, 0.7],
+        )
+
+        self.assertEqual(selection["selection_metric"], "recall")
+        self.assertIn("candidate_evaluations", selection)
+        self.assertEqual(
+            selection["selected_thresholds"],
+            {"lower_threshold": 0.1, "upper_threshold": 0.5},
+        )
 
 
 if __name__ == "__main__":

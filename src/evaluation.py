@@ -1,6 +1,7 @@
 """Reusable evaluation metrics for binary credit-risk predictions."""
 
 from collections.abc import Sequence
+from itertools import product
 
 import numpy as np
 from sklearn.metrics import (
@@ -29,9 +30,7 @@ def evaluate_binary_predictions(
     probability_array = np.asarray(predicted_probabilities, dtype=float)
     class_array = np.asarray(predicted_classes)
 
-    if not (
-        len(target_array) == len(probability_array) == len(class_array)
-    ):
+    if not (len(target_array) == len(probability_array) == len(class_array)):
         raise ValueError(
             "Target values, probabilities, and predicted classes must have "
             "the same length."
@@ -43,14 +42,12 @@ def evaluate_binary_predictions(
     ):
         raise ValueError("Predicted probabilities must be finite values from 0 to 1.")
 
-    true_negatives, false_positives, false_negatives, true_positives = (
-        confusion_matrix(target_array, class_array, labels=[0, 1]).ravel()
-    )
+    true_negatives, false_positives, false_negatives, true_positives = confusion_matrix(
+        target_array, class_array, labels=[0, 1]
+    ).ravel()
     specificity_denominator = true_negatives + false_positives
     specificity = (
-        true_negatives / specificity_denominator
-        if specificity_denominator
-        else 0.0
+        true_negatives / specificity_denominator if specificity_denominator else 0.0
     )
 
     return {
@@ -101,9 +98,7 @@ def analyze_calibration(
     probability_array = np.asarray(predicted_probabilities, dtype=float)
 
     if len(target_array) != len(probability_array):
-        raise ValueError(
-            "Target values and probabilities must have the same length."
-        )
+        raise ValueError("Target values and probabilities must have the same length.")
     if len(target_array) == 0:
         raise ValueError("Cannot analyse calibration for empty predictions.")
     if number_of_bins < 2:
@@ -167,4 +162,155 @@ def analyze_calibration(
         "expected_calibration_error": round(expected_calibration_error, 4),
         "number_of_bins": number_of_bins,
         "calibration_bins": calibration_bins,
+    }
+
+
+def evaluate_threshold_policy(
+    target_values: Sequence[int],
+    predicted_probabilities: Sequence[float],
+    *,
+    lower_threshold: float,
+    upper_threshold: float,
+) -> dict[str, object]:
+    """Evaluate the project's APPROVE/REVIEW/REJECT policy.
+
+    ``REJECT`` is treated as the positive operational action when calculating
+    binary metrics.  The returned group rates separately describe the three
+    decisions so threshold effects remain visible.
+    """
+    target_array = np.asarray(target_values)
+    probability_array = np.asarray(predicted_probabilities, dtype=float)
+    if not 0 <= lower_threshold < upper_threshold <= 1:
+        raise ValueError(
+            "Thresholds must satisfy 0 <= lower_threshold < upper_threshold <= 1."
+        )
+
+    decisions = np.where(
+        probability_array < lower_threshold,
+        "APPROVE",
+        np.where(probability_array < upper_threshold, "REVIEW", "REJECT"),
+    )
+    reject_predictions = (decisions == "REJECT").astype(int)
+    binary_metrics = evaluate_binary_predictions(
+        target_array,
+        probability_array,
+        reject_predictions,
+    )
+
+    total_count = len(target_array)
+    default_count = int(np.sum(target_array == 1))
+    non_default_count = int(np.sum(target_array == 0))
+    decision_counts = {
+        decision: int(np.sum(decisions == decision))
+        for decision in ("APPROVE", "REVIEW", "REJECT")
+    }
+    decision_rates = {
+        decision: round(count / total_count, 4)
+        for decision, count in decision_counts.items()
+    }
+    default_rates_by_decision = {
+        decision: round(
+            float(np.mean(target_array[decisions == decision]))
+            if decision_counts[decision]
+            else 0.0,
+            4,
+        )
+        for decision in ("APPROVE", "REVIEW", "REJECT")
+    }
+
+    return {
+        "lower_threshold": lower_threshold,
+        "upper_threshold": upper_threshold,
+        "binary_metrics": binary_metrics,
+        "decision_counts": decision_counts,
+        "decision_rates": decision_rates,
+        "default_rates_by_decision": default_rates_by_decision,
+        "false_approval_rate": round(
+            float(np.sum((decisions == "APPROVE") & (target_array == 1)))
+            / default_count
+            if default_count
+            else 0.0,
+            4,
+        ),
+        "false_rejection_rate": round(
+            float(np.sum((decisions == "REJECT") & (target_array == 0)))
+            / non_default_count
+            if non_default_count
+            else 0.0,
+            4,
+        ),
+    }
+
+
+def select_thresholds(
+    target_values: Sequence[int],
+    predicted_probabilities: Sequence[float],
+    *,
+    lower_thresholds: Sequence[float],
+    upper_thresholds: Sequence[float],
+    selection_metric: str = "recall",
+    maximum_false_approval_rate: float | None = None,
+) -> dict[str, object]:
+    """Select a threshold pair from validation candidates.
+
+    The default objective prioritises recall for the REJECT action.  A maximum
+    false-approval constraint can be supplied when the project has an explicit
+    risk requirement.  Ties prefer fewer false approvals, fewer rejections,
+    then lower thresholds.  The function returns every evaluated candidate so
+    the choice can be documented rather than treated as a hidden constant.
+    """
+    supported_metrics = {"recall", "precision", "f1_score", "specificity"}
+    if selection_metric not in supported_metrics:
+        raise ValueError(
+            "selection_metric must be one of: " + ", ".join(sorted(supported_metrics))
+        )
+    if maximum_false_approval_rate is not None and not (
+        0 <= maximum_false_approval_rate <= 1
+    ):
+        raise ValueError("maximum_false_approval_rate must be between 0 and 1.")
+
+    evaluated_candidates = [
+        evaluate_threshold_policy(
+            target_values,
+            predicted_probabilities,
+            lower_threshold=lower_threshold,
+            upper_threshold=upper_threshold,
+        )
+        for lower_threshold, upper_threshold in product(
+            lower_thresholds,
+            upper_thresholds,
+        )
+        if lower_threshold < upper_threshold
+    ]
+    if not evaluated_candidates:
+        raise ValueError("No valid lower and upper threshold pairs were supplied.")
+
+    eligible_candidates = [
+        candidate
+        for candidate in evaluated_candidates
+        if maximum_false_approval_rate is None
+        or candidate["false_approval_rate"] <= maximum_false_approval_rate
+    ]
+    if not eligible_candidates:
+        raise ValueError("No threshold candidates satisfy maximum_false_approval_rate.")
+
+    selected_candidate = max(
+        eligible_candidates,
+        key=lambda candidate: (
+            candidate["binary_metrics"][selection_metric],
+            -candidate["false_approval_rate"],
+            -candidate["decision_rates"]["REJECT"],
+            -candidate["lower_threshold"],
+            -candidate["upper_threshold"],
+        ),
+    )
+    return {
+        "selection_metric": selection_metric,
+        "maximum_false_approval_rate": maximum_false_approval_rate,
+        "selected_thresholds": {
+            "lower_threshold": selected_candidate["lower_threshold"],
+            "upper_threshold": selected_candidate["upper_threshold"],
+        },
+        "selected_evaluation": selected_candidate,
+        "candidate_evaluations": evaluated_candidates,
     }
