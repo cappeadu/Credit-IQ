@@ -6,3 +6,4 @@ mlruns/
 mlflow.db
 mlflow.db-*
 src/__pycache__/
+artifacts/model_package_*/

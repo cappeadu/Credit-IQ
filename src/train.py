@@ -28,6 +28,7 @@ from src.evaluation import (
     evaluate_threshold_policy,
     select_thresholds,
 )
+from src.model_package import create_model_package
 from src.modeling import (
     DEFAULT_SELECTION_METRICS,
     build_candidate_models,
@@ -178,6 +179,15 @@ def train(
     feature_engineering_path = ROOT / "artifacts/feature_engineering.joblib"
     joblib.dump(feature_engineering, feature_engineering_path)
 
+    feature_schema = {
+        "feature_version": FEATURE_VERSION,
+        "raw_features": RAW_FEATURE_COLUMNS,
+        "model_features": MODEL_FEATURE_COLUMNS,
+        "target": "target",
+    }
+    feature_schema_path = ROOT / "artifacts/feature_schema.json"
+    feature_schema_path.write_text(json.dumps(feature_schema, indent=2))
+
     # Save thresholds selected from calibrated validation probabilities.
     thresholds = json.dumps(
         {
@@ -241,12 +251,7 @@ def train(
             "test_row_count": len(test_data),
             "split_manifest_path": manifest_file,
         },
-        feature_schema={
-            "feature_version": FEATURE_VERSION,
-            "raw_features": RAW_FEATURE_COLUMNS,
-            "model_features": MODEL_FEATURE_COLUMNS,
-            "target": "target",
-        },
+        feature_schema=feature_schema,
         validation_report=validation_report,
         artifact_paths={
             "metrics": metrics_path,
@@ -254,9 +259,28 @@ def train(
             "selected_estimator": selected_model_path,
             "preprocessing": feature_engineering_path,
             "configuration": thresholds_path,
+            "schema": feature_schema_path,
         },
     )
     print(f"MLflow run ID: {mlflow_run_id}")
+
+    model_package_path = create_model_package(
+        package_directory=ROOT / "artifacts" / f"model_package_{mlflow_run_id}",
+        calibrated_model_path=calibrated_model_path,
+        selected_estimator_path=selected_model_path,
+        feature_engineering_path=feature_engineering_path,
+        thresholds_path=thresholds_path,
+        feature_schema_path=feature_schema_path,
+        split_manifest_path=manifest_file,
+        metadata={
+            "mlflow_run_id": mlflow_run_id,
+            "selected_model_name": best_model_name,
+            "feature_version": FEATURE_VERSION,
+            "dataset_fingerprint": dataset_fingerprint,
+            "split_manifest_path": str(manifest_file),
+        },
+    )
+    print(f"Model package: {model_package_path}")
 
     return results_json
 

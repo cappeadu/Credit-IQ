@@ -36,6 +36,12 @@ assigned to training. If records from a frozen split are removed, training stops
 instead of silently changing the evaluation population. The manifest is stored
 alongside the split data as `split_manifest.json`.
 
+After a successful training run, an immutable package is created at
+`artifacts/model_package_<MLFLOW_RUN_ID>/`. It contains the calibrated model,
+selected estimator, feature-engineering artifact, thresholds, feature schema,
+split manifest, and package metadata. The MLflow run ID in the package metadata
+links the runtime files back to the tracked training and validation results.
+
 ## Planned architecture
 
 ```text
