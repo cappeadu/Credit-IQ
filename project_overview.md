@@ -308,3 +308,7 @@ The model should therefore be presented as an educational and analytical tool un
 ## Implementation rule
 
 The work will be implemented in explicit phases. No later phase should be implemented unless it is explicitly requested. Phase 1 establishes this scope and documentation only; it does not change the training pipeline, API, model artifacts, or Streamlit behaviour.
+
+API request schemas accept cleaned customer fields only. The target column and
+unexpected fields are rejected, and batch requests are limited to 1,000
+customers per request in the initial local implementation.

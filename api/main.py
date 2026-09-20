@@ -5,8 +5,9 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 
+from api.schemas import HealthResponse, ModelInfoResponse
 from src.config import ROOT
 from src.model_package import load_model_package
 
@@ -47,11 +48,39 @@ def create_app(model_package_path: str | Path | None = None) -> FastAPI:
         yield
         application.state.model_package = None
 
-    return FastAPI(
+    application = FastAPI(
         title="Credit Card Risk API",
         version="1.0.0",
         lifespan=lifespan,
     )
+
+    @application.get("/health", response_model=HealthResponse)
+    async def health(request: Request) -> HealthResponse:
+        """Report whether the application has a loaded model package."""
+        return HealthResponse(
+            status="ok",
+            model_loaded=request.app.state.model_package is not None,
+        )
+
+    @application.get("/model-info", response_model=ModelInfoResponse)
+    async def model_info(request: Request) -> ModelInfoResponse:
+        """Expose metadata and frozen thresholds for the loaded package."""
+        package = request.app.state.model_package
+        if package is None:
+            raise RuntimeError("A model package has not been loaded.")
+
+        metadata = package["metadata"]
+        thresholds = package["thresholds"]
+        return ModelInfoResponse(
+            package_version=metadata["package_version"],
+            mlflow_run_id=metadata["mlflow_run_id"],
+            selected_model_name=metadata["selected_model_name"],
+            feature_version=metadata["feature_version"],
+            lower_threshold=thresholds["lower_threshold"],
+            upper_threshold=thresholds["upper_threshold"],
+        )
+
+    return application
 
 
 app = create_app()

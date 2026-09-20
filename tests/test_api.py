@@ -17,12 +17,60 @@ class ApiStartupTests(unittest.TestCase):
         )
 
     def test_api_loads_the_validated_package_during_startup(self):
-        fake_package = {"metadata": {"mlflow_run_id": "run-123"}}
+        fake_package = {
+            "metadata": {
+                "package_version": 1,
+                "mlflow_run_id": "run-123",
+                "selected_model_name": "Logistic Regression",
+                "feature_version": "v1",
+            },
+            "thresholds": {"lower_threshold": 0.3, "upper_threshold": 0.7},
+        }
         application = create_app("artifacts")
 
         with patch("api.main.load_model_package", return_value=fake_package):
             with TestClient(application):
                 self.assertEqual(application.state.model_package, fake_package)
+
+    def test_health_reports_loaded_model(self):
+        fake_package = {"metadata": {"mlflow_run_id": "run-123"}}
+        application = create_app("artifacts")
+
+        with patch("api.main.load_model_package", return_value=fake_package):
+            with TestClient(application) as client:
+                response = client.get("/health")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"status": "ok", "model_loaded": True})
+
+    def test_model_info_returns_loaded_package_metadata_and_thresholds(self):
+        fake_package = {
+            "metadata": {
+                "package_version": 1,
+                "mlflow_run_id": "run-123",
+                "selected_model_name": "Logistic Regression",
+                "feature_version": "v1",
+            },
+            "thresholds": {"lower_threshold": 0.3, "upper_threshold": 0.7},
+        }
+        application = create_app("artifacts")
+
+        with patch("api.main.load_model_package", return_value=fake_package):
+            with TestClient(application) as client:
+                response = client.get("/model-info")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {
+                "package_version": 1,
+                "mlflow_run_id": "run-123",
+                "selected_model_name": "Logistic Regression",
+                "feature_version": "v1",
+                "lower_threshold": 0.3,
+                "upper_threshold": 0.7,
+            },
+        )
 
     def test_api_startup_fails_without_a_package_path(self):
         application = create_app()
