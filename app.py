@@ -1,12 +1,14 @@
-import json
+import os
 import warnings
 
-import joblib
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import streamlit as st
+
+from src.api_client import CreditRiskApiClient, CreditRiskApiError
+from src.utils import FeatureEngineering
 
 warnings.filterwarnings("ignore")
 
@@ -173,28 +175,33 @@ PAY_MAP = {
 
 
 # ── Loaders ─────────────────────────────────────────────────────────────────────
-@st.cache_resource
-def load_model():
-    model = joblib.load("./artifacts/calibrated_model.joblib")
-    feature_engineering = joblib.load("./artifacts/feature_engineering.joblib")
-    explainer = joblib.load("./artifacts/shap_explainer.joblib")
-    return model, feature_engineering, explainer
-
-
 @st.cache_data
 def load_scored():
     return pd.read_csv("./artifacts/scored_customers.csv")
 
 
-@st.cache_data
-def load_thresholds():
-    with open("./artifacts/thresholds.json") as f:
-        return json.load(f)
+@st.cache_resource
+def load_api_client():
+    return CreditRiskApiClient(os.getenv("CREDIT_CARD_API_URL"))
 
 
-model, feature_engineering, explainer = load_model()
+api_client = load_api_client()
+try:
+    api_health = api_client.health()
+    model_info = api_client.model_info()
+    if not api_health.get("model_loaded"):
+        raise CreditRiskApiError("The prediction API has no model package loaded.")
+except CreditRiskApiError as exc:
+    st.error(f"Prediction API unavailable: {exc}")
+    st.stop()
+
 scored_df = load_scored()
-thresholds = load_thresholds()
+feature_engineering = FeatureEngineering()
+explainer = None
+thresholds = {
+    "lower_threshold": model_info["lower_threshold"],
+    "upper_threshold": model_info["upper_threshold"],
+}
 LOWER_T = thresholds["lower_threshold"]
 UPPER_T = thresholds["upper_threshold"]
 
@@ -343,6 +350,8 @@ def plot_global_shap(df, n=10):
     try:
         # x_proc = prep.transform(sample) if hasattr(prep, 'transform') else sample.values
         # x_proc = sample.values
+        if explainer is None:
+            return None
         sv = explainer.shap_values(sample)
         # sv_use = sv[1] if isinstance(sv, list) else sv
         sv_use = sv[:, :, 1]
@@ -414,16 +423,19 @@ with tab1:
         )
         if uploaded:
             raw = pd.read_csv(uploaded)
-            X_proc = feature_engineering.transform(raw)
-            missing = [c for c in FEATURES if c not in X_proc.columns]
-            if missing:
-                st.error(f"Missing columns: {missing}")
+            try:
+                predictions = api_client.predict_dataframe(raw)
+                X_proc = feature_engineering.transform(raw)
+                X_proc["probability"] = [
+                    prediction["probability"] for prediction in predictions
+                ]
+                X_proc["decision"] = [
+                    prediction["decision"] for prediction in predictions
+                ]
+                working_df = X_proc
+            except (CreditRiskApiError, ValueError, KeyError) as exc:
+                st.error(f"Could not score uploaded data: {exc}")
                 st.stop()
-
-            X_proc["probability"] = model.predict_proba(X_proc)[:, 1]
-            X_proc["decision"] = X_proc["probability"].apply(get_decision)
-            # working_df = raw
-            working_df = X_proc
         else:
             st.info("Upload a CSV file to score new customers.")
             st.stop()
@@ -664,6 +676,8 @@ with tab1:
                 feat_cols = [c for c in FEATURES if c in customer.index]
                 x_row = pd.DataFrame([customer[feat_cols]])
                 # x_proc = prep.transform(x_row) if hasattr(prep, 'transform') else x_row.values
+                if explainer is None:
+                    raise RuntimeError("SHAP explanations are not provided by the API yet.")
                 sv = explainer.shap_values(x_row)
                 sv_use = sv[:, :, 1][0]
                 # sv_use = sv[1][0] if isinstance(sv, list) else sv[0]
