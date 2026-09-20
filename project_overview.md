@@ -346,3 +346,20 @@ request data or scoring input and `503` when no model package is loaded.
    the planned SHAP context and AI explanation layer without hard-coded claims.
 4. **End-to-end review:** verify the API and Streamlit workflow together,
    document startup order, and test unavailable-service behaviour.
+
+The end-to-end check can be run after MLflow, FastAPI, and the packaged model
+are ready:
+
+```powershell
+python -B scripts/verify_local_stack.py
+```
+
+It validates the configured package locally, checks API health and metadata,
+sends one raw test customer through the API, and confirms that SHAP
+contributions are present. Start Streamlit separately to review the visual
+dashboard and customer breakdown:
+
+```powershell
+$env:CREDIT_CARD_API_URL = "http://127.0.0.1:8000"
+python -m streamlit run app.py
+```
