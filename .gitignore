@@ -5,5 +5,5 @@ data/
 mlruns/
 mlflow.db
 mlflow.db-*
-src/__pycache__/
 artifacts/model_package_*/
+*__pycache__

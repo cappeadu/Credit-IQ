@@ -251,6 +251,17 @@ Get-Content metrics/val_set.json
 
 ## FastAPI interface
 
+The API loads one validated packaged model at startup. Set the package path
+before starting Uvicorn:
+
+```powershell
+$env:CREDIT_CARD_MODEL_PACKAGE = "artifacts/model_package_<MLFLOW_RUN_ID>"
+uvicorn api.main:app --host 127.0.0.1 --port 8000
+```
+
+Startup fails if the environment variable is missing or the package fails
+validation. Loose files in `artifacts/` are not accepted by the API.
+
 The likely API endpoints are:
 
 - `GET /health`: confirms that the service and model package loaded;
