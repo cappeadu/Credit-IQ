@@ -2,12 +2,42 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import numpy as np
 from fastapi.testclient import TestClient
 
 from api.main import create_app, resolve_model_package_path
+from src.utils import FeatureEngineering
+from tests.test_api_schemas import make_customer_payload
+
+
+class FakePredictionModel:
+    def predict_proba(self, features):
+        probabilities = [0.2 + 0.6 * (index % 2) for index in range(len(features))]
+        return np.array(
+            [[1 - probability, probability] for probability in probabilities]
+        )
+
+    def predict(self, features):
+        return [int(probability >= 0.5) for probability in self._probabilities(features)]
+
+    def _probabilities(self, features):
+        return [0.2 + 0.6 * (index % 2) for index in range(len(features))]
 
 
 class ApiStartupTests(unittest.TestCase):
+    def _prediction_package(self):
+        return {
+            "metadata": {
+                "package_version": 1,
+                "mlflow_run_id": "run-123",
+                "selected_model_name": "Logistic Regression",
+                "feature_version": "v1",
+            },
+            "thresholds": {"lower_threshold": 0.3, "upper_threshold": 0.7},
+            "feature_engineering": FeatureEngineering(),
+            "calibrated_model": FakePredictionModel(),
+        }
+
     def test_explicit_relative_package_path_is_resolved_from_repository_root(self):
         resolved_path = resolve_model_package_path("artifacts")
 
@@ -69,6 +99,43 @@ class ApiStartupTests(unittest.TestCase):
                 "feature_version": "v1",
                 "lower_threshold": 0.3,
                 "upper_threshold": 0.7,
+            },
+        )
+
+    def test_single_prediction_transforms_and_scores_customer(self):
+        application = create_app("artifacts")
+
+        with patch(
+            "api.main.load_model_package",
+            return_value=self._prediction_package(),
+        ):
+            with TestClient(application) as client:
+                response = client.post("/predict", json=make_customer_payload())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"probability": 0.2, "decision": "APPROVE"})
+
+    def test_batch_prediction_returns_one_result_per_customer(self):
+        application = create_app("artifacts")
+        request_body = {
+            "customers": [make_customer_payload(), make_customer_payload()]
+        }
+
+        with patch(
+            "api.main.load_model_package",
+            return_value=self._prediction_package(),
+        ):
+            with TestClient(application) as client:
+                response = client.post("/predict/batch", json=request_body)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {
+                "predictions": [
+                    {"probability": 0.2, "decision": "APPROVE"},
+                    {"probability": 0.8, "decision": "REJECT"},
+                ]
             },
         )
 
