@@ -693,7 +693,8 @@ with tab1:
 
         with right:
             st.markdown("**What is driving this risk?**")
-            st.caption("SHAP values — underlying Random Forest model")
+            selected_model_name = model_info.get("selected_model_name", "selected model")
+            st.caption(f"SHAP values — underlying {selected_model_name} model")
             try:
                 explanation = customer.get("explanation")
                 if not explanation:
@@ -710,6 +711,45 @@ with tab1:
                 )
                 st.pyplot(fig_s)
                 plt.close()
+
+                contribution_table = pd.DataFrame(contribution_rows)
+                if contribution_table.empty:
+                    st.info("No SHAP contributions were returned for this customer.")
+                else:
+                    contribution_table["absolute_shap_value"] = contribution_table[
+                        "shap_value"
+                    ].abs()
+                    contribution_table = contribution_table.sort_values(
+                        "absolute_shap_value", ascending=False
+                    ).head(8)
+                    contribution_table["direction"] = contribution_table[
+                        "direction"
+                    ].map(
+                        {
+                            "increases_risk": "Increases risk",
+                            "decreases_risk": "Decreases risk",
+                        }
+                    )
+                    contribution_table = contribution_table.rename(
+                        columns={
+                            "feature_name": "Feature",
+                            "feature_value": "Feature value",
+                            "shap_value": "SHAP value",
+                            "direction": "Direction",
+                        }
+                    )
+                    st.dataframe(
+                        contribution_table[
+                            ["Feature", "Feature value", "SHAP value", "Direction"]
+                        ].round({"Feature value": 4, "SHAP value": 4}),
+                        width="stretch",
+                        hide_index=True,
+                    )
+                    st.caption(
+                        f"Base value: {explanation['base_value']:.4f} "
+                        f"({explanation['output_space']}). Positive SHAP values "
+                        "increase the model's risk output; negative values decrease it."
+                    )
             except Exception as e:
                 st.info(f"SHAP explanation unavailable: {e}")
 
