@@ -363,3 +363,16 @@ dashboard and customer breakdown:
 $env:CREDIT_CARD_API_URL = "http://127.0.0.1:8000"
 python -m streamlit run app.py
 ```
+
+### Phase 9 — AI explanation stages
+
+1. **Explanation contract:** define the structured prediction, model metadata,
+   SHAP context, and grounded AI response shape. This stage is complete; it
+   does not call OpenAI.
+2. **OpenAI configuration and client:** add server-side configuration and a
+   small client with timeout and unavailable-service handling.
+3. **Explanation service and endpoint:** implement `POST /explain` using the
+   prediction context and return the structured AI response.
+4. **Streamlit integration and review:** add an optional explanation action,
+   keep raw SHAP values visible, and test the full workflow without allowing
+   the AI to change the model decision.

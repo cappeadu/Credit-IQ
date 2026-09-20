@@ -71,6 +71,24 @@ class ExplanationResponse(BaseModel):
     contributions: list[FeatureContribution]
 
 
+class AIExplanationRequest(BaseModel):
+    """Model context supplied to the later AI explanation service."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    prediction: PredictionResponse
+    model_info: "ModelInfoResponse"
+
+
+class AIExplanationResponse(BaseModel):
+    """Grounded natural-language explanation returned by the AI layer."""
+
+    summary: str = Field(min_length=1, max_length=2000)
+    key_risk_factors: list[str] = Field(max_length=5)
+    protective_factors: list[str] = Field(max_length=5)
+    limitations: list[str] = Field(min_length=1, max_length=5)
+
+
 class BatchPredictionResponse(BaseModel):
     """Predictions for a submitted batch."""
 

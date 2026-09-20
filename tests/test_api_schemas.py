@@ -2,7 +2,12 @@ import unittest
 
 from pydantic import ValidationError
 
-from api.schemas import BatchPredictionRequest, CustomerRecord
+from api.schemas import (
+    AIExplanationRequest,
+    AIExplanationResponse,
+    BatchPredictionRequest,
+    CustomerRecord,
+)
 
 
 def make_customer_payload():
@@ -53,6 +58,49 @@ class ApiSchemaTests(unittest.TestCase):
     def test_batch_request_requires_at_least_one_customer(self):
         with self.assertRaises(ValidationError):
             BatchPredictionRequest.model_validate({"customers": []})
+
+    def test_ai_explanation_request_contains_prediction_and_model_context(self):
+        request = AIExplanationRequest.model_validate(
+            {
+                "prediction": {
+                    "probability": 0.72,
+                    "decision": "REJECT",
+                    "explanation": {
+                        "base_value": -1.4,
+                        "output_space": "model_output",
+                        "contributions": [
+                            {
+                                "feature_name": "utilization_rate",
+                                "feature_value": 0.9,
+                                "shap_value": 0.6,
+                                "direction": "increases_risk",
+                            }
+                        ],
+                    },
+                },
+                "model_info": {
+                    "package_version": 1,
+                    "mlflow_run_id": "run-123",
+                    "selected_model_name": "XGBoost",
+                    "feature_version": "feature-engineering-v1",
+                    "lower_threshold": 0.3,
+                    "upper_threshold": 0.7,
+                },
+            }
+        )
+        self.assertEqual(request.prediction.decision, "REJECT")
+        self.assertEqual(request.model_info.selected_model_name, "XGBoost")
+
+    def test_ai_explanation_response_requires_a_limitation(self):
+        with self.assertRaises(ValidationError):
+            AIExplanationResponse.model_validate(
+                {
+                    "summary": "The model assigned REVIEW.",
+                    "key_risk_factors": [],
+                    "protective_factors": [],
+                    "limitations": [],
+                }
+            )
 
 
 if __name__ == "__main__":
