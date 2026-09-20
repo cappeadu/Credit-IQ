@@ -102,6 +102,30 @@ class ApiStartupTests(unittest.TestCase):
             },
         )
 
+    def test_model_info_returns_service_unavailable_when_package_is_not_loaded(self):
+        application = create_app("artifacts")
+
+        with patch("api.main.load_model_package", return_value={}):
+            with TestClient(application) as client:
+                application.state.model_package = None
+                response = client.get("/model-info")
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json()["detail"], "The model package is not loaded.")
+
+    def test_prediction_returns_unprocessable_entity_when_scoring_fails(self):
+        application = create_app("artifacts")
+
+        with patch(
+            "api.main.load_model_package",
+            return_value={"thresholds": {"lower_threshold": 0.3, "upper_threshold": 0.7}},
+        ):
+            with TestClient(application) as client:
+                response = client.post("/predict", json=make_customer_payload())
+
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("Customer could not be scored", response.json()["detail"])
+
     def test_single_prediction_transforms_and_scores_customer(self):
         application = create_app("artifacts")
 

@@ -312,3 +312,24 @@ The work will be implemented in explicit phases. No later phase should be implem
 API request schemas accept cleaned customer fields only. The target column and
 unexpected fields are rejected, and batch requests are limited to 1,000
 customers per request in the initial local implementation.
+
+### FastAPI endpoint checks
+
+Start the API with a packaged model selected:
+
+```powershell
+$env:CREDIT_CARD_MODEL_PACKAGE = "artifacts/model_package_<MLFLOW_RUN_ID>"
+uvicorn api.main:app --host 127.0.0.1 --port 8000
+```
+
+Useful local checks:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/health
+Invoke-RestMethod http://127.0.0.1:8000/model-info
+Start-Process http://127.0.0.1:8000/docs
+```
+
+The prediction endpoints are `POST /predict` for one customer and
+`POST /predict/batch` for a bounded batch. FastAPI returns `422` for invalid
+request data or scoring input and `503` when no model package is loaded.

@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 
 from api.schemas import (
     BatchPredictionRequest,
@@ -49,6 +49,17 @@ def _score_customer_records(
         )
         for row in scored_data.itertuples()
     ]
+
+
+def _require_model_package(request: Request) -> dict[str, Any]:
+    """Return the loaded package or a clear service-unavailable response."""
+    model_package = getattr(request.app.state, "model_package", None)
+    if model_package is None:
+        raise HTTPException(
+            status_code=503,
+            detail="The model package is not loaded.",
+        )
+    return model_package
 
 
 def resolve_model_package_path(
@@ -102,9 +113,7 @@ def create_app(model_package_path: str | Path | None = None) -> FastAPI:
     @application.get("/model-info", response_model=ModelInfoResponse)
     async def model_info(request: Request) -> ModelInfoResponse:
         """Expose metadata and frozen thresholds for the loaded package."""
-        package = request.app.state.model_package
-        if package is None:
-            raise RuntimeError("A model package has not been loaded.")
+        package = _require_model_package(request)
 
         metadata = package["metadata"]
         thresholds = package["thresholds"]
@@ -123,8 +132,14 @@ def create_app(model_package_path: str | Path | None = None) -> FastAPI:
         request: Request,
     ) -> PredictionResponse:
         """Return a prediction for one cleaned customer record."""
-        model_package = request.app.state.model_package
-        predictions = _score_customer_records([customer], model_package)
+        model_package = _require_model_package(request)
+        try:
+            predictions = _score_customer_records([customer], model_package)
+        except (TypeError, ValueError, KeyError) as exc:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Customer could not be scored: {exc}",
+            ) from exc
         return predictions[0]
 
     @application.post("/predict/batch", response_model=BatchPredictionResponse)
@@ -133,11 +148,17 @@ def create_app(model_package_path: str | Path | None = None) -> FastAPI:
         request: Request,
     ) -> BatchPredictionResponse:
         """Return predictions for a bounded batch of customer records."""
-        model_package = request.app.state.model_package
-        predictions = _score_customer_records(
-            prediction_request.customers,
-            model_package,
-        )
+        model_package = _require_model_package(request)
+        try:
+            predictions = _score_customer_records(
+                prediction_request.customers,
+                model_package,
+            )
+        except (TypeError, ValueError, KeyError) as exc:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Customers could not be scored: {exc}",
+            ) from exc
         return BatchPredictionResponse(predictions=predictions)
 
     return application
