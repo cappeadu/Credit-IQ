@@ -369,8 +369,9 @@ python -m streamlit run app.py
 1. **Explanation contract:** define the structured prediction, model metadata,
    SHAP context, and grounded AI response shape. This stage is complete; it
    does not call OpenAI.
-2. **OpenAI configuration and client:** add server-side configuration and a
-   small client with timeout and unavailable-service handling.
+2. **OpenAI configuration and client:** complete. The server-side client reads
+   `OPENAI_API_KEY` and optional `OPENAI_MODEL`, uses a bounded timeout, and
+   disables response storage for explanation requests.
 3. **Explanation service and endpoint:** implement `POST /explain` using the
    prediction context and return the structured AI response.
 4. **Streamlit integration and review:** add an optional explanation action,

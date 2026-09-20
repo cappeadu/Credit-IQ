@@ -7,3 +7,4 @@ mlflow.db
 mlflow.db-*
 artifacts/model_package_*/
 __pycache__/
+**/__pycache__/**
