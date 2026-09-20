@@ -12,12 +12,15 @@ from api.schemas import (
     BatchPredictionRequest,
     BatchPredictionResponse,
     CustomerRecord,
+    DeterministicExplanationResponse,
+    ExplanationRequest,
     HealthResponse,
     ModelInfoResponse,
     PredictionResponse,
 )
 from src.config import ROOT
 from src.data import MODEL_FEATURE_COLUMNS
+from src.explanation_service import generate_deterministic_explanation
 from src.explanations import build_shap_explanations
 from src.model_package import load_model_package
 from src.predict import score_dataframe, transform_for_prediction
@@ -171,6 +174,19 @@ def create_app(model_package_path: str | Path | None = None) -> FastAPI:
                 detail=f"Customers could not be scored: {exc}",
             ) from exc
         return BatchPredictionResponse(predictions=predictions)
+
+    @application.post("/explain", response_model=DeterministicExplanationResponse)
+    async def explain_prediction(
+        explanation_request: ExplanationRequest,
+    ) -> DeterministicExplanationResponse:
+        """Explain an existing prediction using deterministic SHAP rules."""
+        try:
+            return generate_deterministic_explanation(explanation_request)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Explanation could not be generated: {exc}",
+            ) from exc
 
     return application
 

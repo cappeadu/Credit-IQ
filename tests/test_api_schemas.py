@@ -3,10 +3,10 @@ import unittest
 from pydantic import ValidationError
 
 from api.schemas import (
-    AIExplanationRequest,
-    AIExplanationResponse,
     BatchPredictionRequest,
     CustomerRecord,
+    DeterministicExplanationResponse,
+    ExplanationRequest,
 )
 
 
@@ -59,8 +59,8 @@ class ApiSchemaTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             BatchPredictionRequest.model_validate({"customers": []})
 
-    def test_ai_explanation_request_contains_prediction_and_model_context(self):
-        request = AIExplanationRequest.model_validate(
+    def test_explanation_request_contains_prediction_and_model_context(self):
+        request = ExplanationRequest.model_validate(
             {
                 "prediction": {
                     "probability": 0.72,
@@ -91,16 +91,21 @@ class ApiSchemaTests(unittest.TestCase):
         self.assertEqual(request.prediction.decision, "REJECT")
         self.assertEqual(request.model_info.selected_model_name, "XGBoost")
 
-    def test_ai_explanation_response_requires_a_limitation(self):
+    def test_deterministic_explanation_response_requires_a_limitation(self):
         with self.assertRaises(ValidationError):
-            AIExplanationResponse.model_validate(
+            DeterministicExplanationResponse.model_validate(
                 {
                     "summary": "The model assigned REVIEW.",
-                    "key_risk_factors": [],
-                    "protective_factors": [],
+                    "increasing_contributors": [],
+                    "decreasing_contributors": [],
                     "limitations": [],
                 }
             )
+
+    def test_deterministic_explanation_response_schema_forbids_additional_properties(self):
+        response_schema = DeterministicExplanationResponse.model_json_schema()
+
+        self.assertFalse(response_schema["additionalProperties"])
 
 
 if __name__ == "__main__":

@@ -272,9 +272,9 @@ The likely API endpoints are:
 
 An optional later endpoint, `POST /explain/ai`, may send structured SHAP context to OpenAI. The core prediction endpoint should not depend on an AI explanation being available.
 
-## SHAP and AI explanations
+## SHAP and deterministic explanations
 
-The explanation flow will be:
+The current explanation flow is:
 
 ```text
 Customer input
@@ -285,10 +285,16 @@ Probability and decision
    ↓
 SHAP values and feature context
    ↓
-OpenAI explanation layer
+Deterministic explanation rules
 ```
 
-The project will not hard-code recommendations based on SHAP values. The API should return feature names, feature values, SHAP values, contribution direction, and model metadata. The later AI layer should explain the supplied evidence without inventing facts, claiming causation, guaranteeing approval, or overriding the model decision.
+The project does not hard-code credit recommendations based on SHAP values.
+The API returns feature names, feature values, SHAP values, contribution
+direction, and model metadata. The `/explain` endpoint then ranks supplied
+contributions by absolute magnitude, omits contributions below its documented
+materiality threshold, and labels positive/negative SHAP values as increasing
+or decreasing this model's output. It does not claim causation, guarantee
+approval, or change the model decision.
 
 ## Scope and limitations
 
@@ -364,16 +370,16 @@ $env:CREDIT_CARD_API_URL = "http://127.0.0.1:8000"
 python -m streamlit run app.py
 ```
 
-### Phase 9 — AI explanation stages
+### Phase 9 — Explanation stages
 
-1. **Explanation contract:** define the structured prediction, model metadata,
-   SHAP context, and grounded AI response shape. This stage is complete; it
-   does not call OpenAI.
-2. **OpenAI configuration and client:** complete. The server-side client reads
-   `OPENAI_API_KEY` and optional `OPENAI_MODEL`, uses a bounded timeout, and
-   disables response storage for explanation requests.
-3. **Explanation service and endpoint:** implement `POST /explain` using the
-   prediction context and return the structured AI response.
-4. **Streamlit integration and review:** add an optional explanation action,
-   keep raw SHAP values visible, and test the full workflow without allowing
-   the AI to change the model decision.
+1. **Explanation contract:** complete. The API defines the prediction, model
+   metadata, SHAP context, and structured explanation response.
+2. **Deterministic explanation service:** complete. `POST /explain` ranks and
+   formats supplied SHAP contributions without a network call, external
+   provider, or change to the model probability/decision.
+3. **Streamlit integration and review:** next. Add an explanation action that
+   calls `/explain`, display the returned increasing/decreasing contributors,
+   keep raw SHAP values visible, and verify unavailable/invalid API behaviour.
+4. **Optional future AI comparison:** deferred. If a later version needs an
+   LLM, it can consume the same structured context, but it must remain
+   optional and must not replace the deterministic explanation path.

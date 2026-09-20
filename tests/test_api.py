@@ -205,6 +205,43 @@ class ApiStartupTests(unittest.TestCase):
             },
         )
 
+    def test_explain_endpoint_returns_deterministic_response(self):
+        application = create_app("artifacts")
+        request_body = {
+            "prediction": {
+                "probability": 0.72,
+                "decision": "REJECT",
+                "explanation": {
+                    "base_value": -1.4,
+                    "output_space": "model_output",
+                    "contributions": [],
+                },
+            },
+            "model_info": {
+                "package_version": 1,
+                "mlflow_run_id": "run-123",
+                "selected_model_name": "XGBoost",
+                "feature_version": "feature-engineering-v1",
+                "lower_threshold": 0.3,
+                "upper_threshold": 0.7,
+            },
+        }
+
+        with patch(
+            "api.main.generate_deterministic_explanation",
+            return_value={
+                "summary": "The model identified elevated risk.",
+                "increasing_contributors": ["Recent payment delays"],
+                "decreasing_contributors": [],
+                "limitations": ["SHAP values are not causal evidence."],
+            },
+        ), patch("api.main.load_model_package", return_value={}):
+            with TestClient(application) as client:
+                response = client.post("/explain", json=request_body)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["summary"], "The model identified elevated risk.")
+
     def test_api_startup_fails_without_a_package_path(self):
         application = create_app()
 
