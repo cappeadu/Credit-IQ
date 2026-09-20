@@ -41,6 +41,10 @@ After a successful training run, an immutable package is created at
 selected estimator, feature-engineering artifact, thresholds, feature schema,
 split manifest, and package metadata. The MLflow run ID in the package metadata
 links the runtime files back to the tracked training and validation results.
+Before scoring, a package is validated for required files, metadata, thresholds,
+feature schema, split manifest, and readable serialized objects. Prediction can
+also use the current loose `artifacts/` directory during migration, but packaged
+artifacts are the preferred runtime input.
 
 ## Planned architecture
 

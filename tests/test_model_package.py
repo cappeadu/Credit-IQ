@@ -3,7 +3,23 @@ import shutil
 import unittest
 from pathlib import Path
 
-from src.model_package import create_model_package
+import joblib
+
+from src.model_package import (
+    create_model_package,
+    load_model_package,
+    validate_model_package,
+)
+
+
+class DummyModel:
+    def predict_proba(self, features):
+        return [[0.5, 0.5]] * len(features)
+
+
+class DummyFeatureEngineering:
+    def transform(self, data):
+        return data
 
 
 class ModelPackageTests(unittest.TestCase):
@@ -13,15 +29,34 @@ class ModelPackageTests(unittest.TestCase):
         package_directory = test_directory / "package"
         shutil.rmtree(test_directory, ignore_errors=True)
         source_directory.mkdir(parents=True)
-        for artifact_name in (
-            "calibrated_model.joblib",
-            "selected_estimator.joblib",
-            "feature_engineering.joblib",
-            "thresholds.json",
-            "feature_schema.json",
-            "split_manifest.json",
-        ):
-            (source_directory / artifact_name).write_text(artifact_name)
+        joblib.dump(DummyModel(), source_directory / "calibrated_model.joblib")
+        joblib.dump(DummyModel(), source_directory / "selected_estimator.joblib")
+        joblib.dump(
+            DummyFeatureEngineering(),
+            source_directory / "feature_engineering.joblib",
+        )
+        (source_directory / "thresholds.json").write_text(
+            json.dumps({"lower_threshold": 0.1, "upper_threshold": 0.3})
+        )
+        (source_directory / "feature_schema.json").write_text(
+            json.dumps(
+                {
+                    "raw_features": ["feature"],
+                    "model_features": ["feature"],
+                    "target": "target",
+                }
+            )
+        )
+        (source_directory / "split_manifest.json").write_text(
+            json.dumps(
+                {
+                    "manifest_version": 1,
+                    "train_row_ids": ["train"],
+                    "validation_row_ids": ["validation"],
+                    "test_row_ids": ["test"],
+                }
+            )
+        )
 
         try:
             created_package = create_model_package(
@@ -44,5 +79,11 @@ class ModelPackageTests(unittest.TestCase):
             self.assertTrue(
                 (created_package / "feature_engineering.joblib").exists()
             )
+            self.assertEqual(
+                validate_model_package(created_package)["mlflow_run_id"],
+                "run-123",
+            )
+            loaded_package = load_model_package(created_package)
+            self.assertIn("calibrated_model", loaded_package)
         finally:
             shutil.rmtree(test_directory, ignore_errors=True)

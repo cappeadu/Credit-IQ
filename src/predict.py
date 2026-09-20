@@ -19,6 +19,7 @@ from src.evaluation import (
     evaluate_binary_predictions,
     evaluate_threshold_policy,
 )
+from src.model_package import load_model_package
 from src.tracking import (
     fingerprint_dataframe,
     log_dataset_evaluation_run,
@@ -227,6 +228,18 @@ def _load_feature_engineering(model_path: str | Path):
     return joblib.load(feature_engineering_file)
 
 
+def _load_runtime_artifacts(model_path: str | Path) -> dict[str, object]:
+    """Load a validated package, with legacy artifact-directory fallback."""
+    package_path = Path(model_path)
+    if (package_path / "package_metadata.json").exists():
+        return load_model_package(package_path)
+    return {
+        "calibrated_model": _load_prediction_model(package_path),
+        "feature_engineering": _load_feature_engineering(package_path),
+        "thresholds": load_thresholds(package_path),
+    }
+
+
 def _write_scored_dataset(
     scored_data: pd.DataFrame,
     *,
@@ -255,14 +268,15 @@ def score_dataset(
     ] = "dataset",
 ):
     raw_prediction_data = load_raw_dataset(data_path, require_target=False)
-    feature_engineering = _load_feature_engineering(model_path)
+    runtime_artifacts = _load_runtime_artifacts(model_path)
+    feature_engineering = runtime_artifacts["feature_engineering"]
     prediction_data = transform_for_prediction(
         raw_prediction_data,
         feature_engineering,
         require_target=False,
     )
-    calibrated_model = _load_prediction_model(model_path)
-    thresholds = load_thresholds(model_path)
+    calibrated_model = runtime_artifacts["calibrated_model"]
+    thresholds = runtime_artifacts["thresholds"]
     scored_data = score_dataframe(
         calibrated_model,
         prediction_data,
@@ -296,14 +310,15 @@ def evaluate_dataset_command(
     ] = None,
 ):
     raw_evaluation_data = load_raw_dataset(data_path, require_target=True)
-    feature_engineering = _load_feature_engineering(model_path)
+    runtime_artifacts = _load_runtime_artifacts(model_path)
+    feature_engineering = runtime_artifacts["feature_engineering"]
     evaluation_data = transform_for_prediction(
         raw_evaluation_data,
         feature_engineering,
         require_target=True,
     )
-    calibrated_model = _load_prediction_model(model_path)
-    thresholds = load_thresholds(model_path)
+    calibrated_model = runtime_artifacts["calibrated_model"]
+    thresholds = runtime_artifacts["thresholds"]
     scored_data = score_dataframe(
         calibrated_model,
         evaluation_data,
