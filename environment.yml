@@ -1,0 +1,23 @@
+name: credit-card-risk
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.13
+  - py-xgboost=3.0.2
+  - scikit-learn=1.7.0
+  - joblib
+  - xlrd
+  - matplotlib
+  - pandas
+  - openpyxl
+  - typer
+  - numpy
+  - shap=0.52.0
+  - scipy
+  - fastapi
+  - streamlit
+  - mlflow
+  - uvicorn
+  - pydantic
+prefix: C:\Users\Lenovo\miniconda3\envs\credit-card-risk
