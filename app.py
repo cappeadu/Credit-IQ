@@ -753,35 +753,6 @@ with tab1:
             except Exception as e:
                 st.info(f"SHAP explanation unavailable: {e}")
 
-            st.markdown("**How to improve this score**")
-            if not sugs:
-                st.success(
-                    "No significant risk factors detected — this customer's profile looks healthy."
-                )
-            else:
-                for s in sugs:
-                    st.markdown(
-                        f"<div class='sug-card'>"
-                        f"<div class='sug-title'>{s['title']}</div>"
-                        f"<div class='sug-text'>{s['text']}</div></div>",
-                        unsafe_allow_html=True,
-                    )
-
-            if has_tgt:
-                actual = int(customer["target"])
-                correct = (actual == 1 and decision == "REJECT") or (
-                    actual == 0 and decision == "APPROVE"
-                )
-                label = "Actually defaulted" if actual == 1 else "Did not default"
-                color = "#791F1F" if actual == 1 else "#27500A"
-                bg = "#FCEBEB" if actual == 1 else "#EAF3DE"
-                st.markdown(
-                    f"<div style='background:{bg};border-radius:10px;padding:10px 14px;margin-top:8px'>"
-                    f"<span style='font-size:12px;font-weight:500;color:{color}'>Ground truth: {label}</span>"
-                    f"<span style='font-size:11px;color:#888;margin-left:8px'>"
-                    f"{'Model was correct' if correct else 'Model was incorrect'}</span></div>",
-                    unsafe_allow_html=True,
-                )
 
 
 # ════════════════════════════════════════════════════════════════════════════════
