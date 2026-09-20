@@ -1,7 +1,6 @@
 import json
 from pathlib import Path
 
-import joblib
 import numpy as np
 import pandas as pd
 import typer
@@ -85,36 +84,6 @@ def transform_for_prediction(
         require_target=TARGET_COLUMN in transformed_dataset.columns,
     )
     return transformed_dataset
-
-
-def load_thresholds(model_path: str | Path) -> dict[str, float]:
-    """Load and validate thresholds frozen during validation."""
-    thresholds_file = Path(model_path) / "thresholds.json"
-    if not thresholds_file.exists():
-        raise FileNotFoundError(
-            f"Threshold configuration was not found: {thresholds_file}"
-        )
-
-    with thresholds_file.open() as file:
-        threshold_configuration = json.load(file)
-
-    try:
-        lower_threshold = float(threshold_configuration["lower_threshold"])
-        upper_threshold = float(threshold_configuration["upper_threshold"])
-    except (KeyError, TypeError, ValueError) as exc:
-        raise ValueError(
-            "Threshold configuration must contain numeric lower_threshold and "
-            "upper_threshold values."
-        ) from exc
-
-    if not 0 <= lower_threshold < upper_threshold <= 1:
-        raise ValueError(
-            "Thresholds must satisfy 0 <= lower_threshold < upper_threshold <= 1."
-        )
-    return {
-        "lower_threshold": lower_threshold,
-        "upper_threshold": upper_threshold,
-    }
 
 
 def score_dataframe(
@@ -212,32 +181,9 @@ def evaluate_labelled_dataset(
     }
 
 
-def _load_prediction_model(model_path: str | Path):
-    model_file = Path(model_path) / "calibrated_model.joblib"
-    if not model_file.exists():
-        raise FileNotFoundError(f"Calibrated model was not found: {model_file}")
-    return joblib.load(model_file)
-
-
-def _load_feature_engineering(model_path: str | Path):
-    feature_engineering_file = Path(model_path) / "feature_engineering.joblib"
-    if not feature_engineering_file.exists():
-        raise FileNotFoundError(
-            f"Feature-engineering artifact was not found: {feature_engineering_file}"
-        )
-    return joblib.load(feature_engineering_file)
-
-
 def _load_runtime_artifacts(model_path: str | Path) -> dict[str, object]:
-    """Load a validated package, with legacy artifact-directory fallback."""
-    package_path = Path(model_path)
-    if (package_path / "package_metadata.json").exists():
-        return load_model_package(package_path)
-    return {
-        "calibrated_model": _load_prediction_model(package_path),
-        "feature_engineering": _load_feature_engineering(package_path),
-        "thresholds": load_thresholds(package_path),
-    }
+    """Load only a validated packaged model directory."""
+    return load_model_package(model_path)
 
 
 def _write_scored_dataset(

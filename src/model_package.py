@@ -120,7 +120,7 @@ def validate_model_package(package_directory: str | Path) -> dict[str, Any]:
     for split_name in ("train", "validation", "test"):
         row_ids = split_manifest.get(f"{split_name}_row_ids")
         if not isinstance(row_ids, list):
-            raise ValueError("Model package split manifest is invalid.")
+            raise TypeError("Model package split manifest is invalid.")
         split_row_ids.extend(row_ids)
     if len(split_row_ids) != len(set(split_row_ids)):
         raise ValueError("Model package split manifest contains duplicate row IDs.")

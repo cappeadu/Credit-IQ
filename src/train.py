@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import joblib
 import typer
@@ -152,6 +153,8 @@ def train(
     selected_model = fitted_candidate_models[best_model_name]
 
     # calibrated model
+    staging_directory = TemporaryDirectory(prefix="credit_card_model_")
+    staging_path = Path(staging_directory.name)
     calibrated_model = CalibratedClassifierCV(
         estimator=selected_model,
         method="isotonic",
@@ -168,15 +171,15 @@ def train(
         maximum_false_approval_rate=MAX_FALSE_APPROVAL_RATE,
     )
     selected_thresholds = threshold_selection["selected_thresholds"]
-    calibrated_model_path = ROOT / "artifacts/calibrated_model.joblib"
+    calibrated_model_path = staging_path / "calibrated_model.joblib"
     joblib.dump(calibrated_model, calibrated_model_path)
 
     # save underlying model for shap analysis
-    selected_model_path = ROOT / f"artifacts/{best_model_name}.joblib"
+    selected_model_path = staging_path / "selected_estimator.joblib"
     joblib.dump(selected_model, selected_model_path)
 
     # save feature engineering object
-    feature_engineering_path = ROOT / "artifacts/feature_engineering.joblib"
+    feature_engineering_path = staging_path / "feature_engineering.joblib"
     joblib.dump(feature_engineering, feature_engineering_path)
 
     feature_schema = {
@@ -185,7 +188,7 @@ def train(
         "model_features": MODEL_FEATURE_COLUMNS,
         "target": "target",
     }
-    feature_schema_path = ROOT / "artifacts/feature_schema.json"
+    feature_schema_path = staging_path / "feature_schema.json"
     feature_schema_path.write_text(json.dumps(feature_schema, indent=2))
 
     # Save thresholds selected from calibrated validation probabilities.
@@ -199,7 +202,7 @@ def train(
         },
         indent=2,
     )
-    thresholds_path = ROOT / "artifacts/thresholds.json"
+    thresholds_path = staging_path / "thresholds.json"
     with thresholds_path.open("w") as f:
         f.write(thresholds)
 
@@ -281,6 +284,7 @@ def train(
         },
     )
     print(f"Model package: {model_package_path}")
+    staging_directory.cleanup()
 
     return results_json
 

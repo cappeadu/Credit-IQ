@@ -2,7 +2,12 @@ import unittest
 
 import pandas as pd
 
-from src.predict import evaluate_labelled_dataset, transform_for_prediction
+from src.config import ROOT
+from src.predict import (
+    _load_runtime_artifacts,
+    evaluate_labelled_dataset,
+    transform_for_prediction,
+)
 from src.utils import FeatureEngineering
 from tests.test_data import make_customer_frame
 
@@ -42,6 +47,10 @@ class PredictionDatasetTests(unittest.TestCase):
             evaluation["thresholds"],
             {"lower_threshold": 0.12, "upper_threshold": 0.30},
         )
+
+    def test_loose_artifact_directory_is_rejected_as_runtime_input(self):
+        with self.assertRaises(ValueError):
+            _load_runtime_artifacts(ROOT / "artifacts")
 
 if __name__ == "__main__":
     unittest.main()

@@ -43,8 +43,8 @@ split manifest, and package metadata. The MLflow run ID in the package metadata
 links the runtime files back to the tracked training and validation results.
 Before scoring, a package is validated for required files, metadata, thresholds,
 feature schema, split manifest, and readable serialized objects. Prediction can
-also use the current loose `artifacts/` directory during migration, but packaged
-artifacts are the preferred runtime input.
+only use a packaged model directory; the loose `artifacts/` directory is not a
+valid runtime model input.
 
 ## Planned architecture
 
@@ -178,8 +178,8 @@ later evaluation commands create separate runs for roles such as `test` or
 `external_evaluation` and can link them to the source training run.
 
 ```powershell
-python -m src.predict score --data-path data/new_customers.csv --model-path artifacts
-python -m src.predict evaluate --data-path data/test_only/test_only.csv --model-path artifacts --dataset-name test --dataset-role test
+python -m src.predict score --data-path data/new_customers.csv --model-path artifacts/model_package_<MLFLOW_RUN_ID>
+python -m src.predict evaluate --data-path data/test_only/test_only.csv --model-path artifacts/model_package_<MLFLOW_RUN_ID> --dataset-name test --dataset-role test
 ```
 
 ## PowerShell command reference
@@ -226,7 +226,7 @@ Evaluate the frozen model and thresholds on a labelled dataset:
 ```powershell
 python -m src.predict evaluate `
   --data-path data/test_only/test_only.csv `
-  --model-path artifacts `
+  --model-path artifacts/model_package_$PARENT_RUN_ID `
   --dataset-name test `
   --dataset-role test `
   --source-training-run-id $PARENT_RUN_ID
