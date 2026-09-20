@@ -1,3 +1,4 @@
+import json
 import os
 import warnings
 
@@ -8,7 +9,7 @@ import pandas as pd
 import streamlit as st
 
 from src.api_client import CreditRiskApiClient, CreditRiskApiError
-from src.utils import FeatureEngineering
+from src.config import ROOT
 
 warnings.filterwarnings("ignore")
 
@@ -83,16 +84,6 @@ h1, h2, h3 { font-family: 'DM Serif Display', serif; }
 .sig-amber { color: #633806; font-weight: 500; }
 .sig-green { color: #27500A; font-weight: 500; }
 
-.sug-card {
-    background: #FFFBF5;
-    border: 0.5px solid #FAC775;
-    border-radius: 10px;
-    padding: 10px 14px;
-    margin-bottom: 8px;
-}
-.sug-title { font-size: 13px; font-weight: 500; color: #1A1A2E; margin-bottom: 3px; }
-.sug-text  { font-size: 12px; color: #666; line-height: 1.5; }
-
 .dist-bar {
     height: 20px;
     border-radius: 6px;
@@ -157,8 +148,6 @@ FEATURES = [
 ]
 
 EDU_MAP = {1: "Graduate school", 2: "University", 3: "High school", 4: "Other/Unknown"}
-GENDER_MAP = {1: "Male", 2: "Female"}
-MARITAL_MAP = {1: "Married", 2: "Single", 3: "Other"}
 PAY_MAP = {
     -2: "No consumption",
     -1: "Paid in full",
@@ -180,6 +169,21 @@ def load_api_client():
     return CreditRiskApiClient(os.getenv("CREDIT_CARD_API_URL"))
 
 
+@st.cache_data
+def load_model_comparison_report():
+    """Load recorded validation comparison metrics for the dashboard."""
+    with (ROOT / "metrics" / "val_set.json").open(encoding="utf-8") as report_file:
+        report = json.load(report_file)
+    if not isinstance(report, dict) or not isinstance(
+        report.get("model_comparison"), dict
+    ):
+        raise ValueError(
+            "The validation report is not from the current training pipeline. "
+            "Run training to regenerate metrics/val_set.json."
+        )
+    return report
+
+
 api_client = load_api_client()
 try:
     api_health = api_client.health()
@@ -190,8 +194,6 @@ except CreditRiskApiError as exc:
     st.error(f"Prediction API unavailable: {exc}")
     st.stop()
 
-feature_engineering = FeatureEngineering()
-explainer = None
 thresholds = {
     "lower_threshold": model_info["lower_threshold"],
     "upper_threshold": model_info["upper_threshold"],
@@ -200,26 +202,46 @@ LOWER_T = thresholds["lower_threshold"]
 UPPER_T = thresholds["upper_threshold"]
 
 
+def _add_engineered_feature_values(scored_data, predictions):
+    """Add API-produced model feature values for display without local transforms."""
+    feature_values_by_name = {}
+    for prediction in predictions:
+        explanation = prediction.get("explanation") or {}
+        values_for_customer = {
+            contribution["feature_name"]: contribution["feature_value"]
+            for contribution in explanation.get("contributions", [])
+        }
+        for feature_name in values_for_customer:
+            feature_values_by_name.setdefault(feature_name, []).append(
+                values_for_customer[feature_name]
+            )
+
+    for feature_name, values in feature_values_by_name.items():
+        if feature_name not in scored_data.columns and len(values) == len(scored_data):
+            scored_data[feature_name] = values
+    return scored_data
+
+
 @st.cache_data
-def load_and_score_dashboard_dataset():
+def load_and_score_dashboard_dataset(model_run_id):
     """Load the raw local test dataset and score it through FastAPI."""
-    raw_data = pd.read_csv("./data/test_only/test_only.csv")
-    transformed_data = feature_engineering.transform(raw_data)
+    raw_data = pd.read_csv(ROOT / "data" / "test_only" / "test_only.csv")
     predictions = api_client.predict_dataframe(raw_data)
-    transformed_data["probability"] = [
+    scored_data = raw_data.copy()
+    scored_data["probability"] = [
         prediction["probability"] for prediction in predictions
     ]
-    transformed_data["decision"] = [
+    scored_data["decision"] = [
         prediction["decision"] for prediction in predictions
     ]
-    transformed_data["explanation"] = [
+    scored_data["explanation"] = [
         prediction.get("explanation") for prediction in predictions
     ]
-    return transformed_data
+    return _add_engineered_feature_values(scored_data, predictions)
 
 
 try:
-    scored_df = load_and_score_dashboard_dataset()
+    scored_df = load_and_score_dashboard_dataset(model_info.get("mlflow_run_id"))
 except (CreditRiskApiError, FileNotFoundError, ValueError, KeyError) as exc:
     st.error(f"Could not load the dashboard dataset: {exc}")
     st.stop()
@@ -362,35 +384,37 @@ def plot_shap_local(shap_vals, feature_names, n=8):
 
 
 def plot_global_shap(df, n=10):
-    feat_cols = [c for c in FEATURES if c in df.columns]
-    if not feat_cols:
+    """Plot mean absolute SHAP contribution from API-returned explanations."""
+    if "explanation" not in df.columns:
         return None
-    sample = df[feat_cols].sample(min(500, len(df)), random_state=42)
-    try:
-        # x_proc = prep.transform(sample) if hasattr(prep, 'transform') else sample.values
-        # x_proc = sample.values
-        if explainer is None:
-            return None
-        sv = explainer.shap_values(sample)
-        # sv_use = sv[1] if isinstance(sv, list) else sv
-        sv_use = sv[:, :, 1]
-        mean_abs = pd.Series(np.abs(sv_use).mean(axis=0), index=feat_cols).sort_values()
-        top = mean_abs.tail(n)
-        colors = [
-            "#1A1A2E" if i >= len(top) - 3 else "#EBEBEB" for i in range(len(top))
-        ]
-        fig, ax = plt.subplots(figsize=(6, 4))
-        fig.patch.set_facecolor("white")
-        ax.set_facecolor("white")
-        ax.barh(top.index, top.values, color=colors, height=0.6)
-        ax.set_xlabel("Mean |SHAP value|", fontsize=9)
-        ax.spines[["top", "right", "left"]].set_visible(False)
-        ax.spines["bottom"].set_color("#EBEBEB")
-        ax.tick_params(colors="#888", labelsize=8)
-        plt.tight_layout()
-        return fig
-    except Exception:
+    contribution_values = []
+    for explanation in df["explanation"].dropna():
+        for contribution in explanation.get("contributions", []):
+            contribution_values.append(
+                {
+                    "feature_name": contribution["feature_name"],
+                    "absolute_shap_value": abs(contribution["shap_value"]),
+                }
+            )
+    if not contribution_values:
         return None
+
+    importance = pd.DataFrame(contribution_values)
+    mean_abs = importance.groupby("feature_name")["absolute_shap_value"].mean()
+    top = mean_abs.nlargest(n).sort_values()
+    colors = [
+        "#1A1A2E" if i >= len(top) - 3 else "#EBEBEB" for i in range(len(top))
+    ]
+    fig, ax = plt.subplots(figsize=(6, 4))
+    fig.patch.set_facecolor("white")
+    ax.set_facecolor("white")
+    ax.barh(top.index, top.values, color=colors, height=0.6)
+    ax.set_xlabel("Mean |SHAP value|", fontsize=9)
+    ax.spines[["top", "right", "left"]].set_visible(False)
+    ax.spines["bottom"].set_color("#EBEBEB")
+    ax.tick_params(colors="#888", labelsize=8)
+    plt.tight_layout()
+    return fig
 
 
 # ── Topbar ───────────────────────────────────────────────────────────────────────
@@ -444,7 +468,7 @@ with tab1:
             raw = pd.read_csv(uploaded)
             try:
                 predictions = api_client.predict_dataframe(raw)
-                X_proc = feature_engineering.transform(raw)
+                X_proc = raw.copy()
                 X_proc["probability"] = [
                     prediction["probability"] for prediction in predictions
                 ]
@@ -454,7 +478,7 @@ with tab1:
                 X_proc["explanation"] = [
                     prediction.get("explanation") for prediction in predictions
                 ]
-                working_df = X_proc
+                working_df = _add_engineered_feature_values(X_proc, predictions)
             except (CreditRiskApiError, ValueError, KeyError) as exc:
                 st.error(f"Could not score uploaded data: {exc}")
                 st.stop()
@@ -518,13 +542,14 @@ with tab1:
         )
 
     display_df = working_df[working_df["decision"].isin(dec_filter)].copy()
-    display_df = display_df.sort_values("probability", ascending=sort_asc).reset_index(
-        drop=True
-    )
+    display_df = display_df.sort_values("probability", ascending=sort_asc)
+    display_df.insert(0, "customer_row_index", display_df.index)
+    display_df = display_df.reset_index(drop=True)
 
     show_cols = [
         c
         for c in [
+            "customer_row_index",
             "probability",
             "decision",
             "age",
@@ -537,6 +562,7 @@ with tab1:
         if c in display_df.columns
     ]
     rename_map = {
+        "customer_row_index": "Customer row",
         "probability": "Probability",
         "decision": "Decision",
         "age": "Age",
@@ -559,13 +585,14 @@ with tab1:
 
     st.dataframe(tv, width="stretch", height=280, hide_index=True)
     st.caption(
-        "Enter a row index below (starting at 0) to open the full customer breakdown."
+        "The table includes the original customer row. Use the table position below "
+        "to open its full breakdown."
     )
 
     # ── Row selector + drilldown ──
     if len(display_df) > 0:
         sel = st.number_input(
-            "Customer row index",
+            "Customer table position",
             min_value=0,
             max_value=len(display_df) - 1,
             value=0,
@@ -581,8 +608,6 @@ with tab1:
 
         prob = customer["probability"]
         decision = customer["decision"]
-        sugs = get_suggestions(customer)
-
         dec_color = {"APPROVE": "#27500A", "REVIEW": "#633806", "REJECT": "#791F1F"}
         dec_bg = {"APPROVE": "#EAF3DE", "REVIEW": "#FAEEDA", "REJECT": "#FCEBEB"}
         explanation = customer.get("explanation")
@@ -693,7 +718,13 @@ with tab1:
                 unsafe_allow_html=True,
             )
 
-            with st.expander("Explain this decision"):
+            explanation_is_expanded = (
+                st.session_state.get("explanation_expanded_key") == explanation_key
+            )
+            with st.expander(
+                "Explain this decision",
+                expanded=explanation_is_expanded,
+            ):
                 if st.button(
                     "Generate explanation",
                     key=f"explain_decision_{int(sel)}",
@@ -712,6 +743,7 @@ with tab1:
                             deterministic_explanation
                         )
                         st.session_state["deterministic_explanation_key"] = explanation_key
+                        st.session_state["explanation_expanded_key"] = explanation_key
                         st.rerun()
                     except (CreditRiskApiError, ValueError, KeyError) as exc:
                         st.error(f"Could not explain this decision: {exc}")
@@ -811,8 +843,8 @@ with tab1:
                         f"({explanation['output_space']}). Positive SHAP values "
                         "increase the model's risk output; negative values decrease it."
                     )
-            except Exception as e:
-                st.info(f"SHAP explanation unavailable: {e}")
+            except (KeyError, TypeError, ValueError, RuntimeError) as exc:
+                st.info(f"SHAP explanation unavailable: {exc}")
 
 
 
@@ -1015,22 +1047,27 @@ with tab2:
 
     # ── Model performance ──
     st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown("**Model bake-off — performance summary**")
-    st.dataframe(
-        pd.DataFrame(
-            {
-                "Model": ["Logistic Regression", "Random Forest", "XGBoost"],
-                "ROC-AUC": ["0.763", "0.785", "0.784"],
-                "Recall": ["0.615", "0.621", "0.607"],
-                "Precision": ["0.457", "0.472", "0.471"],
-                "F1": ["0.524", "0.536", "0.530"],
-                "Selected": ["", "Yes", ""],
-            }
-        ).set_index("Model"),
-        width="stretch",
-    )
-    st.caption(
-        "Winner: Random Forest with engineered features — chosen on recall. "
-        "Probabilities are calibrated. SHAP values reflect the underlying "
-        "uncalibrated Random Forest, which is standard practice."
-    )
+    st.markdown("**Model bake-off — validation performance**")
+    try:
+        comparison_report = load_model_comparison_report()
+        selected_model_name = model_info.get("selected_model_name")
+        comparison_rows = []
+        for model_name, model_metrics in comparison_report["model_comparison"].items():
+            row = {"Model": model_name}
+            for metric_name, metric_value in model_metrics.items():
+                if metric_name == "model_name":
+                    continue
+                if isinstance(metric_value, (int, float)):
+                    display_name = metric_name.replace("_", " ").title()
+                    row[display_name] = f"{metric_value:.3f}"
+            row["Selected"] = "Yes" if model_name == selected_model_name else ""
+            comparison_rows.append(row)
+
+        comparison_table = pd.DataFrame(comparison_rows).set_index("Model")
+        st.dataframe(comparison_table, width="stretch")
+        st.caption(
+            f"The packaged model is {selected_model_name}. Values are validation-set "
+            "metrics from the current training run; threshold selection is separate."
+        )
+    except (FileNotFoundError, KeyError, TypeError, ValueError) as exc:
+        st.warning(f"Validation model comparison is unavailable: {exc}")
