@@ -585,6 +585,8 @@ with tab1:
 
         dec_color = {"APPROVE": "#27500A", "REVIEW": "#633806", "REJECT": "#791F1F"}
         dec_bg = {"APPROVE": "#EAF3DE", "REVIEW": "#FAEEDA", "REJECT": "#FCEBEB"}
+        explanation = customer.get("explanation")
+        explanation_key = f"{source}:{int(sel)}:{prob:.12f}:{decision}"
 
         left, right = st.columns(2)
 
@@ -691,12 +693,71 @@ with tab1:
                 unsafe_allow_html=True,
             )
 
+            with st.expander("Explain this decision"):
+                if st.button(
+                    "Generate explanation",
+                    key=f"explain_decision_{int(sel)}",
+                    disabled=not bool(explanation),
+                ):
+                    try:
+                        deterministic_explanation = api_client.explain_prediction(
+                            prediction={
+                                "probability": float(prob),
+                                "decision": decision,
+                                "explanation": explanation,
+                            },
+                            model_info=model_info,
+                        )
+                        st.session_state["deterministic_explanation"] = (
+                            deterministic_explanation
+                        )
+                        st.session_state["deterministic_explanation_key"] = explanation_key
+                        st.rerun()
+                    except (CreditRiskApiError, ValueError, KeyError) as exc:
+                        st.error(f"Could not explain this decision: {exc}")
+
+                deterministic_explanation = st.session_state.get(
+                    "deterministic_explanation"
+                )
+                if (
+                    deterministic_explanation
+                    and st.session_state.get("deterministic_explanation_key")
+                    == explanation_key
+                ):
+                    st.info(deterministic_explanation["summary"])
+                    st.markdown("**Contributors increasing model output**")
+                    increasing = deterministic_explanation.get(
+                        "increasing_contributors", []
+                    )
+                    for contributor in increasing:
+                        st.write(f"• {contributor}")
+                    if not increasing:
+                        st.caption(
+                            "No material increasing contributors were identified."
+                        )
+
+                    st.markdown("**Contributors decreasing model output**")
+                    decreasing = deterministic_explanation.get(
+                        "decreasing_contributors", []
+                    )
+                    for contributor in decreasing:
+                        st.write(f"• {contributor}")
+                    if not decreasing:
+                        st.caption(
+                            "No material decreasing contributors were identified."
+                        )
+
+                    st.markdown("**Limitations**")
+                    for limitation in deterministic_explanation.get(
+                        "limitations", []
+                    ):
+                        st.write(f"• {limitation}")
+
         with right:
             st.markdown("**What is driving this risk?**")
             selected_model_name = model_info.get("selected_model_name", "selected model")
             st.caption(f"SHAP values — underlying {selected_model_name} model")
             try:
-                explanation = customer.get("explanation")
                 if not explanation:
                     raise RuntimeError(
                         "SHAP explanations were not returned by the API."

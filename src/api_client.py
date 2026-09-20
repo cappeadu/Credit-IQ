@@ -20,7 +20,7 @@ class CreditRiskApiError(RuntimeError):
 
 
 class CreditRiskApiClient:
-    """Client for health, model metadata, and prediction API calls."""
+    """Client for health, model metadata, prediction, and explanation calls."""
 
     def __init__(self, base_url: str | None = None, timeout_seconds: float = 10.0):
         configured_url = base_url or os.getenv(
@@ -52,7 +52,9 @@ class CreditRiskApiClient:
                 detail = error_body.get("detail", str(exc))
             except (json.JSONDecodeError, UnicodeDecodeError):
                 detail = str(exc)
-            raise CreditRiskApiError(f"API request failed ({exc.code}): {detail}") from exc
+            raise CreditRiskApiError(
+                f"API request failed ({exc.code}): {detail}"
+            ) from exc
         except (URLError, TimeoutError, OSError) as exc:
             raise CreditRiskApiError(
                 f"Could not connect to the prediction API at {self.base_url}."
@@ -89,3 +91,18 @@ class CreditRiskApiClient:
                 )
             )
         return predictions
+
+    def explain_prediction(
+        self,
+        prediction: Mapping,
+        model_info: Mapping,
+    ) -> dict:
+        """Request a deterministic explanation for one prediction."""
+        return self._request(
+            "POST",
+            "/explain",
+            {
+                "prediction": dict(prediction),
+                "model_info": dict(model_info),
+            },
+        )

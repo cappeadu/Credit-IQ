@@ -23,6 +23,37 @@ class FakeHttpResponse:
 
 
 class ApiClientTests(unittest.TestCase):
+    def test_explain_prediction_sends_prediction_and_model_context(self):
+        client = CreditRiskApiClient("http://example.test")
+        prediction = {
+            "probability": 0.72,
+            "decision": "REJECT",
+            "explanation": {
+                "base_value": 0.1,
+                "output_space": "model_output",
+                "contributions": [],
+            },
+        }
+        model_info = {
+            "package_version": 1,
+            "selected_model_name": "XGBoost",
+        }
+
+        with patch(
+            "src.api_client.urlopen",
+            return_value=FakeHttpResponse(
+                {"summary": "Deterministic explanation"}
+            ),
+        ) as urlopen:
+            response = client.explain_prediction(prediction, model_info)
+
+        request = urlopen.call_args.args[0]
+        request_body = json.loads(request.data.decode("utf-8"))
+        self.assertEqual(response["summary"], "Deterministic explanation")
+        self.assertEqual(request.full_url, "http://example.test/explain")
+        self.assertEqual(request_body["prediction"], prediction)
+        self.assertEqual(request_body["model_info"], model_info)
+
     def test_model_info_is_requested_from_configured_api(self):
         client = CreditRiskApiClient("http://example.test")
 
