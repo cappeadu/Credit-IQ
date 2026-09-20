@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, FiniteFloat
 
 DECISIONS = Literal["APPROVE", "REVIEW", "REJECT"]
+CONTRIBUTION_DIRECTIONS = Literal["increases_risk", "decreases_risk"]
 
 
 class CustomerRecord(BaseModel):
@@ -50,6 +51,24 @@ class PredictionResponse(BaseModel):
 
     probability: FiniteFloat = Field(ge=0, le=1)
     decision: DECISIONS
+    explanation: "ExplanationResponse | None" = None
+
+
+class FeatureContribution(BaseModel):
+    """One feature's SHAP contribution for the selected estimator."""
+
+    feature_name: str
+    feature_value: FiniteFloat
+    shap_value: FiniteFloat
+    direction: CONTRIBUTION_DIRECTIONS
+
+
+class ExplanationResponse(BaseModel):
+    """SHAP context suitable for display or a later AI explanation layer."""
+
+    base_value: FiniteFloat
+    output_space: Literal["model_output"]
+    contributions: list[FeatureContribution]
 
 
 class BatchPredictionResponse(BaseModel):

@@ -17,6 +17,8 @@ from api.schemas import (
     PredictionResponse,
 )
 from src.config import ROOT
+from src.data import MODEL_FEATURE_COLUMNS
+from src.explanations import build_shap_explanations
 from src.model_package import load_model_package
 from src.predict import score_dataframe, transform_for_prediction
 
@@ -42,12 +44,21 @@ def _score_customer_records(
         lower_threshold=thresholds["lower_threshold"],
         upper_threshold=thresholds["upper_threshold"],
     )
+    feature_data = transformed_data[MODEL_FEATURE_COLUMNS]
+    explanation_payloads = build_shap_explanations(
+        model_package["selected_estimator"],
+        feature_data,
+        MODEL_FEATURE_COLUMNS,
+    )
     return [
         PredictionResponse(
             probability=float(row.probability),
             decision=row.decision,
+            explanation=explanation_payload,
         )
-        for row in scored_data.itertuples()
+        for row, explanation_payload in zip(
+            scored_data.itertuples(), explanation_payloads
+        )
     ]
 
 

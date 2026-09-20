@@ -212,6 +212,9 @@ def load_and_score_dashboard_dataset():
     transformed_data["decision"] = [
         prediction["decision"] for prediction in predictions
     ]
+    transformed_data["explanation"] = [
+        prediction.get("explanation") for prediction in predictions
+    ]
     return transformed_data
 
 
@@ -447,6 +450,9 @@ with tab1:
                 ]
                 X_proc["decision"] = [
                     prediction["decision"] for prediction in predictions
+                ]
+                X_proc["explanation"] = [
+                    prediction.get("explanation") for prediction in predictions
                 ]
                 working_df = X_proc
             except (CreditRiskApiError, ValueError, KeyError) as exc:
@@ -689,20 +695,23 @@ with tab1:
             st.markdown("**What is driving this risk?**")
             st.caption("SHAP values — underlying Random Forest model")
             try:
-                feat_cols = [c for c in FEATURES if c in customer.index]
-                x_row = pd.DataFrame([customer[feat_cols]])
-                # x_proc = prep.transform(x_row) if hasattr(prep, 'transform') else x_row.values
-                if explainer is None:
-                    raise RuntimeError("SHAP explanations are not provided by the API yet.")
-                sv = explainer.shap_values(x_row)
-                sv_use = sv[:, :, 1][0]
-                # sv_use = sv[1][0] if isinstance(sv, list) else sv[0]
-
-                fig_s = plot_shap_local(sv_use, feat_cols)
+                explanation = customer.get("explanation")
+                if not explanation:
+                    raise RuntimeError(
+                        "SHAP explanations were not returned by the API."
+                    )
+                contribution_rows = explanation["contributions"]
+                contribution_values = {
+                    row["feature_name"]: row["shap_value"] for row in contribution_rows
+                }
+                fig_s = plot_shap_local(
+                    list(contribution_values.values()),
+                    list(contribution_values),
+                )
                 st.pyplot(fig_s)
                 plt.close()
             except Exception as e:
-                st.info(f"SHAP unavailable: {e}")
+                st.info(f"SHAP explanation unavailable: {e}")
 
             st.markdown("**How to improve this score**")
             if not sugs:

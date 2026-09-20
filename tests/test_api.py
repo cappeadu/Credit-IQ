@@ -36,6 +36,7 @@ class ApiStartupTests(unittest.TestCase):
             "thresholds": {"lower_threshold": 0.3, "upper_threshold": 0.7},
             "feature_engineering": FeatureEngineering(),
             "calibrated_model": FakePredictionModel(),
+            "selected_estimator": FakePredictionModel(),
         }
 
     def test_explicit_relative_package_path_is_resolved_from_repository_root(self):
@@ -132,12 +133,23 @@ class ApiStartupTests(unittest.TestCase):
         with patch(
             "api.main.load_model_package",
             return_value=self._prediction_package(),
+        ), patch(
+            "api.main.build_shap_explanations",
+            return_value=[
+                {
+                    "base_value": 0.1,
+                    "output_space": "model_output",
+                    "contributions": [],
+                }
+            ],
         ):
             with TestClient(application) as client:
                 response = client.post("/predict", json=make_customer_payload())
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {"probability": 0.2, "decision": "APPROVE"})
+        self.assertEqual(response.json()["probability"], 0.2)
+        self.assertEqual(response.json()["decision"], "APPROVE")
+        self.assertIn("explanation", response.json())
 
     def test_batch_prediction_returns_one_result_per_customer(self):
         application = create_app("artifacts")
@@ -148,6 +160,20 @@ class ApiStartupTests(unittest.TestCase):
         with patch(
             "api.main.load_model_package",
             return_value=self._prediction_package(),
+        ), patch(
+            "api.main.build_shap_explanations",
+            return_value=[
+                {
+                    "base_value": 0.1,
+                    "output_space": "model_output",
+                    "contributions": [],
+                },
+                {
+                    "base_value": 0.1,
+                    "output_space": "model_output",
+                    "contributions": [],
+                },
+            ],
         ):
             with TestClient(application) as client:
                 response = client.post("/predict/batch", json=request_body)
@@ -157,8 +183,24 @@ class ApiStartupTests(unittest.TestCase):
             response.json(),
             {
                 "predictions": [
-                    {"probability": 0.2, "decision": "APPROVE"},
-                    {"probability": 0.8, "decision": "REJECT"},
+                    {
+                        "probability": 0.2,
+                        "decision": "APPROVE",
+                        "explanation": {
+                            "base_value": 0.1,
+                            "output_space": "model_output",
+                            "contributions": [],
+                        },
+                    },
+                    {
+                        "probability": 0.8,
+                        "decision": "REJECT",
+                        "explanation": {
+                            "base_value": 0.1,
+                            "output_space": "model_output",
+                            "contributions": [],
+                        },
+                    },
                 ]
             },
         )
