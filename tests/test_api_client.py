@@ -61,6 +61,29 @@ class ApiClientTests(unittest.TestCase):
             with self.assertRaises(CreditRiskApiError):
                 client.health()
 
+    def test_large_dataframe_is_sent_in_api_sized_batches(self):
+        client = CreditRiskApiClient("http://example.test")
+        raw_data = pd.DataFrame([make_customer_payload()] * 1001)
+
+        responses = [
+            FakeHttpResponse(
+                {
+                    "predictions": [
+                        {"probability": 0.2, "decision": "APPROVE"}
+                    ]
+                    * 1000
+                }
+            ),
+            FakeHttpResponse(
+                {"predictions": [{"probability": 0.8, "decision": "REJECT"}]}
+            ),
+        ]
+        with patch("src.api_client.urlopen", side_effect=responses) as urlopen:
+            predictions = client.predict_dataframe(raw_data)
+
+        self.assertEqual(len(predictions), 1001)
+        self.assertEqual(urlopen.call_count, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

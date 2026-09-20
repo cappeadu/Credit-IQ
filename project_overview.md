@@ -338,9 +338,10 @@ request data or scoring input and `503` when no model package is loaded.
 
 1. **API client and prediction migration:** Streamlit uses FastAPI for model
    metadata and uploaded-customer scoring instead of loading model artifacts.
-2. **Dashboard and batch workflow migration:** move remaining scored-dataset
-   and portfolio interactions onto API-backed data where appropriate, while
-   keeping the presentation logic in Streamlit.
+2. **Dashboard and batch workflow migration:** completed for the local test
+   dataset and uploads. Streamlit loads raw `data/test_only/test_only.csv`,
+   sends raw customer fields to FastAPI in batches of at most 1,000, and uses
+   the returned probabilities and decisions for the dashboard.
 3. **Explanation integration:** connect the packaged/API explanation data to
    the planned SHAP context and AI explanation layer without hard-coded claims.
 4. **End-to-end review:** verify the API and Streamlit workflow together,

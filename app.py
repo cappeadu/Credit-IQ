@@ -175,11 +175,6 @@ PAY_MAP = {
 
 
 # ── Loaders ─────────────────────────────────────────────────────────────────────
-@st.cache_data
-def load_scored():
-    return pd.read_csv("./artifacts/scored_customers.csv")
-
-
 @st.cache_resource
 def load_api_client():
     return CreditRiskApiClient(os.getenv("CREDIT_CARD_API_URL"))
@@ -195,7 +190,6 @@ except CreditRiskApiError as exc:
     st.error(f"Prediction API unavailable: {exc}")
     st.stop()
 
-scored_df = load_scored()
 feature_engineering = FeatureEngineering()
 explainer = None
 thresholds = {
@@ -204,6 +198,28 @@ thresholds = {
 }
 LOWER_T = thresholds["lower_threshold"]
 UPPER_T = thresholds["upper_threshold"]
+
+
+@st.cache_data
+def load_and_score_dashboard_dataset():
+    """Load the raw local test dataset and score it through FastAPI."""
+    raw_data = pd.read_csv("./data/test_only/test_only.csv")
+    transformed_data = feature_engineering.transform(raw_data)
+    predictions = api_client.predict_dataframe(raw_data)
+    transformed_data["probability"] = [
+        prediction["probability"] for prediction in predictions
+    ]
+    transformed_data["decision"] = [
+        prediction["decision"] for prediction in predictions
+    ]
+    return transformed_data
+
+
+try:
+    scored_df = load_and_score_dashboard_dataset()
+except (CreditRiskApiError, FileNotFoundError, ValueError, KeyError) as exc:
+    st.error(f"Could not load the dashboard dataset: {exc}")
+    st.stop()
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────────
@@ -412,7 +428,7 @@ with tab1:
 
     source = st.radio(
         "Source",
-        ["Use pre-scored test set", "Upload new CSV"],
+        ["Use test dataset", "Upload new CSV"],
         horizontal=True,
         label_visibility="collapsed",
     )

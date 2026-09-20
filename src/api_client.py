@@ -12,6 +12,7 @@ from src.data import RAW_FEATURE_COLUMNS
 
 DEFAULT_API_URL = "http://127.0.0.1:8000"
 API_URL_ENVIRONMENT_VARIABLE = "CREDIT_CARD_API_URL"
+MAX_BATCH_SIZE = 1000
 
 
 class CreditRiskApiError(RuntimeError):
@@ -80,4 +81,11 @@ class CreditRiskApiClient:
         if missing_columns:
             raise ValueError(f"Missing required customer columns: {missing_columns}")
         records = raw_data[RAW_FEATURE_COLUMNS].to_dict(orient="records")
-        return self.predict_records(records)
+        predictions = []
+        for start_index in range(0, len(records), MAX_BATCH_SIZE):
+            predictions.extend(
+                self.predict_records(
+                    records[start_index : start_index + MAX_BATCH_SIZE]
+                )
+            )
+        return predictions
