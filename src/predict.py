@@ -19,10 +19,6 @@ from src.evaluation import (
     evaluate_threshold_policy,
 )
 from src.model_package import load_model_package
-from src.tracking import (
-    fingerprint_dataframe,
-    log_dataset_evaluation_run,
-)
 from src.utils import loan_decision
 
 app = typer.Typer()
@@ -261,6 +257,12 @@ def evaluate_dataset_command(
         str | None, typer.Option(help="optional MLflow training run ID")
     ] = None,
 ):
+    # Keep MLflow available to the evaluation CLI without making it a
+    # dependency of the FastAPI prediction runtime.  api.main imports the
+    # reusable functions from this module, while this command is only used
+    # for tracked offline evaluation.
+    from src.tracking import fingerprint_dataframe, log_dataset_evaluation_run
+
     raw_evaluation_data = load_raw_dataset(data_path, require_target=True)
     runtime_artifacts = _load_runtime_artifacts(model_path)
     feature_engineering = runtime_artifacts["feature_engineering"]

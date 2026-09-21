@@ -1,0 +1,11 @@
+*
+!Dockerfile
+!.dockerignore
+!environment.yml
+!api/
+!api/**
+!src/
+!src/**
+!artifacts/
+!artifacts/model_package_3ff7d9d68db74a72b91a11abf3fc7179/
+!artifacts/model_package_3ff7d9d68db74a72b91a11abf3fc7179/**

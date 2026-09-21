@@ -1,0 +1,6 @@
+{
+  "lower_threshold": 0.05,
+  "upper_threshold": 0.2,
+  "selection_metric": "recall",
+  "maximum_false_approval_rate": 0.05
+}

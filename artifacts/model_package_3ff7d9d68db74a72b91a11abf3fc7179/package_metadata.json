@@ -1,0 +1,16 @@
+{
+  "package_version": 1,
+  "artifacts": [
+    "calibrated_model.joblib",
+    "selected_estimator.joblib",
+    "feature_engineering.joblib",
+    "thresholds.json",
+    "feature_schema.json",
+    "split_manifest.json"
+  ],
+  "mlflow_run_id": "3ff7d9d68db74a72b91a11abf3fc7179",
+  "selected_model_name": "XGBoost",
+  "feature_version": "feature-engineering-v1",
+  "dataset_fingerprint": "c6ef3345c5e24455c2d5bf70d8eee83fe6e3be3e98a86120394aa8f7ddc97b38",
+  "split_manifest_path": "data\\split\\split_manifest.json"
+}
