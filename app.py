@@ -583,20 +583,20 @@ with tab1:
 
     st.dataframe(tv, width="stretch", height=280, hide_index=True)
     st.caption(
-        "The table includes the original customer row. Use the table position below "
-        "to open its full breakdown."
+        "Select the original customer row shown in the table to open its full "
+        "breakdown."
     )
 
     # ── Row selector + drilldown ──
     if len(display_df) > 0:
-        sel = st.number_input(
-            "Customer table position",
-            min_value=0,
-            max_value=len(display_df) - 1,
-            value=0,
-            step=1,
+        selected_customer_row = st.selectbox(
+            "Customer row",
+            display_df["customer_row_index"].tolist(),
+            format_func=lambda row_index: f"Customer row {row_index}",
         )
-        customer = display_df.iloc[sel]
+        customer = display_df.loc[
+            display_df["customer_row_index"] == selected_customer_row
+        ].iloc[0]
 
         st.markdown("---")
         st.markdown(
@@ -609,7 +609,9 @@ with tab1:
         dec_color = {"APPROVE": "#27500A", "REVIEW": "#633806", "REJECT": "#791F1F"}
         dec_bg = {"APPROVE": "#EAF3DE", "REVIEW": "#FAEEDA", "REJECT": "#FCEBEB"}
         explanation = customer.get("explanation")
-        explanation_key = f"{source}:{int(sel)}:{prob:.12f}:{decision}"
+        explanation_key = (
+            f"{source}:{int(selected_customer_row)}:{prob:.12f}:{decision}"
+        )
 
         left, right = st.columns(2)
 
@@ -725,7 +727,7 @@ with tab1:
             ):
                 if st.button(
                     "Generate explanation",
-                    key=f"explain_decision_{int(sel)}",
+                    key=f"explain_decision_{int(selected_customer_row)}",
                     disabled=not bool(explanation),
                 ):
                     try:
