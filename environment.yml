@@ -21,4 +21,4 @@ dependencies:
   - openai
   - uvicorn
   - pydantic
-prefix: C:\Users\Lenovo\miniconda3\envs\credit-card-risk
+
