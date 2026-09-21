@@ -30,7 +30,7 @@ def _validate_manifest(manifest: dict[str, Any]) -> None:
     for split_name in SPLIT_NAMES:
         row_ids = manifest.get(f"{split_name}_row_ids")
         if not isinstance(row_ids, list):
-            raise ValueError(f"Split manifest is missing {split_name}_row_ids.")
+            raise TypeError(f"Split manifest is missing {split_name}_row_ids.")
 
     all_row_ids = [
         row_id

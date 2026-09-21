@@ -1,11 +1,11 @@
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import Annotated
 
 import joblib
 import typer
 from sklearn.calibration import CalibratedClassifierCV
-from typing_extensions import Annotated
 
 from src.config import (
     FEATURE_VERSION,
@@ -51,15 +51,15 @@ app = typer.Typer()
 
 @app.command()
 def train(
-    data_path: Annotated[str, typer.Option(help="dataset path or link")] = None,
+    data_path: Annotated[str | None, typer.Option(help="dataset path or link")] = None,
     path_to_save_val_test: Annotated[
-        str, typer.Option(help="path to save val and test sets")
+        str | None, typer.Option(help="path to save val and test sets")
     ] = None,
     path_to_save_test_only: Annotated[
-        str, typer.Option(help="path to save test set only")
+        str | None, typer.Option(help="path to save test set only")
     ] = None,
     split_manifest_path: Annotated[
-        str, typer.Option(help="path to the persisted split manifest")
+        str | None, typer.Option(help="path to the persisted split manifest")
     ] = None,
 ):
     configure_mlflow()
