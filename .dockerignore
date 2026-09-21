@@ -1,7 +1,7 @@
 *
 !Dockerfile
 !.dockerignore
-!environment.yml
+!requirements-api.txt
 !api/
 !api/**
 !src/
