@@ -226,6 +226,12 @@ def _add_engineered_feature_values(scored_data, predictions):
 def load_and_score_dashboard_dataset(model_run_id):
     """Load the raw local test dataset and score it through FastAPI."""
     raw_data = pd.read_csv(ROOT / "data" / "test_only" / "test_only.csv")
+    return _score_raw_dashboard_data(raw_data, model_run_id)
+
+
+@st.cache_data
+def _score_raw_dashboard_data(raw_data, model_run_id):
+    """Score raw dashboard data once per dataset and packaged model."""
     predictions = api_client.predict_dataframe(raw_data)
     scored_data = raw_data.copy()
     scored_data["probability"] = [
@@ -467,18 +473,10 @@ with tab1:
         if uploaded:
             raw = pd.read_csv(uploaded)
             try:
-                predictions = api_client.predict_dataframe(raw)
-                X_proc = raw.copy()
-                X_proc["probability"] = [
-                    prediction["probability"] for prediction in predictions
-                ]
-                X_proc["decision"] = [
-                    prediction["decision"] for prediction in predictions
-                ]
-                X_proc["explanation"] = [
-                    prediction.get("explanation") for prediction in predictions
-                ]
-                working_df = _add_engineered_feature_values(X_proc, predictions)
+                working_df = _score_raw_dashboard_data(
+                    raw,
+                    model_info.get("mlflow_run_id"),
+                )
             except (CreditRiskApiError, ValueError, KeyError) as exc:
                 st.error(f"Could not score uploaded data: {exc}")
                 st.stop()
