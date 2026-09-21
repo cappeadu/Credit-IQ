@@ -1,7 +1,8 @@
+from typing import Annotated
+
 import joblib
 import shap
 import typer
-from typing_extensions import Annotated
 
 from src.config import ROOT
 

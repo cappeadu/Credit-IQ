@@ -1,10 +1,10 @@
 import json
 from pathlib import Path
+from typing import Annotated
 
 import numpy as np
 import pandas as pd
 import typer
-from typing_extensions import Annotated
 
 from src.config import ROOT, THRESHOLDS
 from src.data import (
@@ -205,10 +205,12 @@ def _write_scored_dataset(
 @app.command("score")
 def score_dataset(
     data_path: Annotated[
-        str, typer.Option(help="CSV dataset path or directory")
+        str | None, typer.Option(help="CSV dataset path or directory")
     ] = None,
-    model_path: Annotated[str, typer.Option(help="model artifact directory")] = None,
-    output_path: Annotated[str, typer.Option(help="output CSV path")] = None,
+    model_path: Annotated[
+        str | None, typer.Option(help="model artifact directory")
+    ] = None,
+    output_path: Annotated[str | None, typer.Option(help="output CSV path")] = None,
     dataset_name: Annotated[
         str, typer.Option(help="name used for the default output filename")
     ] = "dataset",
@@ -241,10 +243,14 @@ def score_dataset(
 @app.command("evaluate")
 def evaluate_dataset_command(
     data_path: Annotated[
-        str, typer.Option(help="labelled CSV dataset path or directory")
+        str | None, typer.Option(help="labelled CSV dataset path or directory")
     ] = None,
-    model_path: Annotated[str, typer.Option(help="model artifact directory")] = None,
-    output_path: Annotated[str, typer.Option(help="output metrics JSON path")] = None,
+    model_path: Annotated[
+        str | None, typer.Option(help="model artifact directory")
+    ] = None,
+    output_path: Annotated[
+        str | None, typer.Option(help="output metrics JSON path")
+    ] = None,
     dataset_name: Annotated[
         str, typer.Option(help="dataset name used for default output paths")
     ] = "dataset",
@@ -252,7 +258,7 @@ def evaluate_dataset_command(
         str, typer.Option(help="MLflow dataset role, such as validation or test")
     ] = "evaluation",
     source_training_run_id: Annotated[
-        str, typer.Option(help="optional MLflow training run ID")
+        str | None, typer.Option(help="optional MLflow training run ID")
     ] = None,
 ):
     raw_evaluation_data = load_raw_dataset(data_path, require_target=True)
