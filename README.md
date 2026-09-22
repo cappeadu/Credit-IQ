@@ -14,6 +14,10 @@ It demonstrates an explainable workflow:
 
 This is a demo and learning project, not a regulated credit-decisioning system or financial-advice tool.
 
+## Live Demo
+
+Try the deployed Streamlit application: [CreditIQ Demo](https://credit-iq-demo.streamlit.app/)
+
 ## Architecture
 
 ```text
