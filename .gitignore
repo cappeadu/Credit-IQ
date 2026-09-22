@@ -1,5 +1,6 @@
 .env
 *.csv
+!data/split/validation_set.csv
 .vscode
 mlruns/
 mlflow.db
@@ -7,3 +8,5 @@ mlflow.db-*
 artifacts/*.csv
 __pycache__/
 **/__pycache__/**
+AGENT.md
+project_overview.md
