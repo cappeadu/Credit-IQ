@@ -1,5 +1,4 @@
 .env
-*.csv
 .vscode
 mlruns/
 mlflow.db
@@ -7,3 +6,4 @@ mlflow.db-*
 artifacts/*.csv
 __pycache__/
 **/__pycache__/**
+data/split
