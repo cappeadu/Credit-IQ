@@ -177,7 +177,7 @@ def load_model_comparison_report():
     if not isinstance(report, dict) or not isinstance(
         report.get("model_comparison"), dict
     ):
-        raise ValueError(
+        raise TypeError(
             "The validation report is not from the current training pipeline. "
             "Run training to regenerate metrics/val_set.json."
         )
@@ -237,9 +237,7 @@ def _score_raw_dashboard_data(raw_data, model_run_id):
     scored_data["probability"] = [
         prediction["probability"] for prediction in predictions
     ]
-    scored_data["decision"] = [
-        prediction["decision"] for prediction in predictions
-    ]
+    scored_data["decision"] = [prediction["decision"] for prediction in predictions]
     scored_data["explanation"] = [
         prediction.get("explanation") for prediction in predictions
     ]
@@ -408,9 +406,7 @@ def plot_global_shap(df, n=10):
     importance = pd.DataFrame(contribution_values)
     mean_abs = importance.groupby("feature_name")["absolute_shap_value"].mean()
     top = mean_abs.nlargest(n).sort_values()
-    colors = [
-        "#1A1A2E" if i >= len(top) - 3 else "#EBEBEB" for i in range(len(top))
-    ]
+    colors = ["#1A1A2E" if i >= len(top) - 3 else "#EBEBEB" for i in range(len(top))]
     fig, ax = plt.subplots(figsize=(6, 4))
     fig.patch.set_facecolor("white")
     ax.set_facecolor("white")
@@ -742,7 +738,9 @@ with tab1:
                         st.session_state["deterministic_explanation"] = (
                             deterministic_explanation
                         )
-                        st.session_state["deterministic_explanation_key"] = explanation_key
+                        st.session_state["deterministic_explanation_key"] = (
+                            explanation_key
+                        )
                         st.session_state["explanation_expanded_key"] = explanation_key
                         st.rerun()
                     except (CreditRiskApiError, ValueError, KeyError) as exc:
@@ -780,14 +778,14 @@ with tab1:
                         )
 
                     st.markdown("**Limitations**")
-                    for limitation in deterministic_explanation.get(
-                        "limitations", []
-                    ):
+                    for limitation in deterministic_explanation.get("limitations", []):
                         st.write(f"• {limitation}")
 
         with right:
             st.markdown("**What is driving this risk?**")
-            selected_model_name = model_info.get("selected_model_name", "selected model")
+            selected_model_name = model_info.get(
+                "selected_model_name", "selected model"
+            )
             st.caption(f"SHAP values — underlying {selected_model_name} model")
             try:
                 if not explanation:
@@ -845,7 +843,6 @@ with tab1:
                     )
             except (KeyError, TypeError, ValueError, RuntimeError) as exc:
                 st.info(f"SHAP explanation unavailable: {exc}")
-
 
 
 # ════════════════════════════════════════════════════════════════════════════════

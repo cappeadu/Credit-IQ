@@ -22,7 +22,7 @@ class CreditRiskApiError(RuntimeError):
 class CreditRiskApiClient:
     """Client for health, model metadata, prediction, and explanation calls."""
 
-    def __init__(self, base_url: str | None = None, timeout_seconds: float = 10.0):
+    def __init__(self, base_url: str | None = None, timeout_seconds: float = 60.0):
         configured_url = base_url or os.getenv(
             API_URL_ENVIRONMENT_VARIABLE,
             DEFAULT_API_URL,
